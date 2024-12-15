@@ -1,0 +1,3 @@
+EASY:5
+MEDIUM:0
+HARD:0
