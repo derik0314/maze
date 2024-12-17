@@ -1,11 +1,11 @@
 import pygame
 import random
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import messagebox, simpledialog
+import sys
 import time
-import threading
-from tkinter import simpledialog
-import operator
+import json
+import operator  # 添加这行
 
 
 # 初始化Pygame
@@ -26,28 +26,34 @@ cell_size = MAZE_SIZE // max(cols, rows)  # 根据迷宫大小自动计算单元
 
 # 加载并缩放star图片
 try:
-    star_image = pygame.image.load('star.png')
+    task_door_image = pygame.image.load('task_door.png')
     small_task_image = pygame.image.load('small_task.png')
     big_task_image = pygame.image.load('big_task.png')
     lock_image = pygame.image.load('lock.png')
     open_image = pygame.image.load('open.png')
-    light_image = pygame.image.load('light.png')  # 添加light图片加载
+    bomb_image = pygame.image.load('bomb.png')  # 保存原始图片
+    bomb_original = bomb_image  # 保存原始炸弹图片以供后续缩放
     
-    new_size = int(cell_size * 0.8)  # 缩小到单元格的80%
-    star_image = pygame.transform.scale(star_image, (new_size, new_size))
+    # 统一使用cell_size的80%作为基准大小
+    new_size = int(cell_size * 0.8)
+    
+    # 对所有图片进行统一缩放
+    task_door_image = pygame.transform.scale(task_door_image, (new_size, new_size))
     small_task_image = pygame.transform.scale(small_task_image, (new_size, new_size))
     big_task_image = pygame.transform.scale(big_task_image, (new_size, new_size))
     lock_image = pygame.transform.scale(lock_image, (new_size, new_size))
     open_image = pygame.transform.scale(open_image, (new_size, new_size))
-    light_image = pygame.transform.scale(light_image, (new_size, new_size))  # 缩放light图片
+    bomb_image = pygame.transform.scale(bomb_image, (new_size, new_size))
+    
 except pygame.error as e:
     print(f"Warning: Could not load image: {e}")
-    star_image = None
+    task_door_image = None
     small_task_image = None
     big_task_image = None
     lock_image = None
     open_image = None
-    light_image = None
+    bomb_image = None
+    bomb_original = None
 
 # 在加载图片的try-except块后添加音效加载
 try:
@@ -65,7 +71,7 @@ try:
     failure_sound.set_volume(0.1)      # 降低到 10% 音量
 
     # 加载并设置BGM
-    pygame.mixer.music.load('bgm.mp3')  # 加载BGM文件
+    pygame.mixer.music.load('bgm.mp3')  # BGM文件
     pygame.mixer.music.set_volume(0.3)  # 设置BGM音量为30%
 except pygame.error as e:
     print(f"Warning: Could not load sound: {e}")
@@ -98,29 +104,35 @@ normal_maze_grid = None
 task_maze_grid = None
 grid = None
 player = None
-blue_squares = []
+task_doors = []  # 存储任务迷宫入口位置（原 blue_squares）
 small_tasks = []  # 存储小任务位置
 big_tasks = []  # 存储大任务位置
 task_timer = None # 计时器
 task_exit_pos = None  # 存储任务迷宫的出口位置
 task_maze_order = []  # 记录进入任务迷宫的顺序
+task_maze_grids = {}  # 存储每个入口点对应的任务迷宫
 current_difficulty = "EASY"  # 默认难度
-light_position = None  # 存储light的位置
+can_through_wall = False  # 是否可以穿墙
+is_fog_active = True  # 是否启用迷雾效果
+
+# 血条相关常量
+MAX_HEALTH = 5  # 最大生命值
+current_health = MAX_HEALTH  # 当前生命值
 
 # 定义状态文本（使用英文作为备选）
 MAZE_STATES = {
     "NORMAL": "Normal Maze",  # 如果中文无法显示就用英文
-    "TASK": "Task Maze {}"    # 任务迷宫会显示编号
+    "TASK": "Task Maze {}"    # 任务迷宫显示编号
 }
 
-# 添加新的全局变量
+# 添加难度关的配置
 DIFFICULTY_SETTINGS = {
     "EASY": 5,    # 10x10 迷宫
     "MEDIUM": 10,  # 15x15 迷宫
     "HARD": 15     # 20x20 迷宫
 }
 
-# 添加难度相关的配置常量
+# 添加难度相关的常量
 DIFFICULTY_CONFIGS = {
     "EASY": {
         "stars": 2,
@@ -146,40 +158,179 @@ COMPLETION_RECORDS = {
     "HARD": 0
 }
 
-# 添加保存和加载记录的函数
+# 在全局变量区域添加
+current_user = None  # 当前登录用户
+
+# 添加用户相关的函数
+def load_users():
+    """从文件加载用户数据"""
+    try:
+        with open('users.json', 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {}  # 如果文件不存在，返回空字典
+
+def save_users(users):
+    """保存用户数据到文件"""
+    with open('users.json', 'w') as f:
+        json.dump(users, f)
+
+def show_login_dialog():
+    """显示登录对话框"""
+    global current_user
+    
+    root = tk.Tk()
+    root.title("迷宫游戏 - 登录")
+    root.geometry("400x300")
+    
+    # 使用柔和的米色作为背景
+    bg_color = '#F5F5F5'  # ���灰白色
+    text_color = '#2C3E50'  # 深蓝灰色
+    button_bg = '#E8E8E8'  # 浅灰色
+    button_fg = '#2C3E50'  # 深蓝灰色
+    entry_bg = 'white'  # 纯白色
+    title_color = '#34495E'  # 深青灰色
+    
+    root.configure(bg=bg_color)
+    
+    users = load_users()
+    result = {'username': None}
+    
+    # 创建主框架
+    main_frame = tk.Frame(root, bg=bg_color)
+    main_frame.place(relx=0.5, rely=0.5, anchor='center')
+    
+    # 标题标签
+    title_label = tk.Label(main_frame, 
+                          text="迷宫探险",
+                          font=('微软雅黑', 24, 'bold'),
+                          fg=title_color,
+                          bg=bg_color)
+    title_label.pack(pady=20)
+    
+    # 用户名输入框架
+    entry_frame = tk.Frame(main_frame, bg=bg_color)
+    entry_frame.pack(pady=10)
+    
+    username_label = tk.Label(entry_frame,
+                            text="用户名:",
+                            font=('微软雅黑', 12),
+                            fg=text_color,
+                            bg=bg_color)
+    username_label.pack(side=tk.LEFT, padx=5)
+    
+    username_entry = tk.Entry(entry_frame,
+                            font=('微软雅黑', 12),
+                            width=15,
+                            bg=entry_bg)
+    username_entry.pack(side=tk.LEFT, padx=5)
+    
+    # 按钮框架
+    button_frame = tk.Frame(main_frame, bg=bg_color)
+    button_frame.pack(pady=20)
+    
+    def create_button(parent, text, command):
+        return tk.Button(parent,
+                        text=text,
+                        font=('微软雅黑', 12),
+                        width=8,
+                        command=command,
+                        bg=button_bg,
+                        fg=button_fg,
+                        relief='flat',  # 扁平化按钮
+                        activebackground='#D0D0D0',  # 鼠标悬停时的颜色
+                        activeforeground=button_fg)
+    
+    def do_login():
+        username = username_entry.get()
+        if not username:
+            messagebox.showerror("错误", "请输入用户名！")
+            return
+        if username not in users:
+            messagebox.showerror("错误", "用户名不存在，请先注册！")
+            return
+        result['username'] = username
+        root.quit()
+    
+    def do_register():
+        username = username_entry.get()
+        if not username:
+            messagebox.showerror("错误", "请输入用户名！")
+            return
+        if username in users:
+            messagebox.showerror("错误", "用户�����存在！")
+            return
+        users[username] = {
+            "EASY": 0,
+            "MEDIUM": 0,
+            "HARD": 0
+        }
+        save_users(users)
+        messagebox.showinfo("成功", "注册成功！")
+        result['username'] = username
+        root.quit()
+    
+    # 创建登录和注册按钮
+    login_btn = create_button(button_frame, "登录", do_login)
+    login_btn.pack(side=tk.LEFT, padx=10)
+    
+    register_btn = create_button(button_frame, "注册", do_register)
+    register_btn.pack(side=tk.LEFT, padx=10)
+    
+    # 将窗口居中显示
+    root.update_idletasks()
+    width = root.winfo_width()
+    height = root.winfo_height()
+    x = (root.winfo_screenwidth() // 2) - (width // 2)
+    y = (root.winfo_screenheight() // 2) - (height // 2)
+    root.geometry('{}x{}+{}+{}'.format(width, height, x, y))
+    
+    try:
+        root.mainloop()
+    except:
+        pass
+    
+    username = result['username']
+    
+    try:
+        root.destroy()
+    except:
+        pass
+    
+    return username
+
+# 修改保存记录相关的函数
 def save_records():
     """保存通关记录到文件"""
-    try:
-        with open('completion_records.txt', 'w') as f:
-            for difficulty, count in COMPLETION_RECORDS.items():
-                f.write(f"{difficulty}:{count}\n")
-    except Exception as e:
-        print(f"Error saving records: {e}")
+    if not current_user:
+        return
+    
+    users = load_users()
+    if current_user in users:
+        users[current_user].update(COMPLETION_RECORDS)
+        save_users(users)
 
 def load_records():
-    """从文件加载通关记录"""
-    try:
-        with open('completion_records.txt', 'r') as f:
-            for line in f:
-                difficulty, count = line.strip().split(':')
-                COMPLETION_RECORDS[difficulty] = int(count)
-    except FileNotFoundError:
-        # 如果文件不存在，使用默认值
-        pass
-    except Exception as e:
-        print(f"Error loading records: {e}")
+    """从文件加载通关���录"""
+    global COMPLETION_RECORDS
+    if not current_user:
+        return
+    
+    users = load_users()
+    if current_user in users:
+        COMPLETION_RECORDS = users[current_user].copy()
 
 # 生成两个随机蓝色方块
-def generate_blue_squares():
-    """根据难度生成对应数量的蓝色方块"""
-    global blue_squares
-    blue_squares = []
+def generate_task_doors():
+    """根据难度生成对应数量的任务迷宫入口"""
+    global task_doors
+    task_doors = []
     
     # 获取当前难度的配置
     current_difficulty = get_current_difficulty()
-    num_stars = DIFFICULTY_CONFIGS[current_difficulty]["stars"]
+    num_doors = DIFFICULTY_CONFIGS[current_difficulty]["stars"]
     
-    # 获取可用位置（除起点和终点）
+    # 获可用位置（除起点和终点）
     available_positions = []
     for x in range(cols):
         for y in range(rows):
@@ -187,9 +338,9 @@ def generate_blue_squares():
                 available_positions.append((x, y))
     
     # 随机选择位置
-    if len(available_positions) >= num_stars:
-        selected_positions = random.sample(available_positions, num_stars)
-        blue_squares = selected_positions
+    if len(available_positions) >= num_doors:
+        selected_positions = random.sample(available_positions, num_doors)
+        task_doors = selected_positions
 
 # 迷宫单元格类
 class Cell:
@@ -200,7 +351,7 @@ class Cell:
         self.visited = False
         
     def draw(self, screen):
-        # 计算实际绘制位置（居中显示）
+        # 计算实际绘制位置（居��显示）
         offset_x = (MAZE_SIZE - cols * cell_size) // 2
         offset_y = (MAZE_SIZE - rows * cell_size) // 2
         x = offset_x + self.x * cell_size
@@ -237,7 +388,7 @@ def check_neighbors(cell):
 def remove_walls(current, next):
     dx = current.x - next.x
     dy = current.y - next.y
-    # 根据相对位置移除墙壁
+    # 根据相对位置移除墙
     if dx == 1:  # 下一个在左边
         current.walls[3] = False
         next.walls[1] = False
@@ -252,29 +403,48 @@ def remove_walls(current, next):
         next.walls[0] = False
 
 # 迷宫生成算法
-def generate_maze():
+def generate_maze(maze_grid=None):
+    """生成迷宫
+    Args:
+        maze_grid: 可选的迷宫网格，如果不提供则使用全局的grid
+    """
     global grid
-    stack = []
-    current = grid[0][0]
-    current.visited = True
     
-    while True:
-        neighbors = check_neighbors(current)
+    # 确定要使用的网格
+    target_grid = maze_grid if maze_grid is not None else grid
+    
+    # 初始化访问记录
+    visited = [[False] * rows for _ in range(cols)]
+    stack = [(0, 0)]
+    visited[0][0] = True
+    
+    while stack:
+        current = stack[-1]
+        x, y = current
+        
+        # 获取未访问的相邻单元格
+        neighbors = []
+        if y > 0 and not visited[x][y-1]:  # 上
+            neighbors.append((x, y-1, 0, 2))
+        if x < cols-1 and not visited[x+1][y]:  # 右
+            neighbors.append((x+1, y, 1, 3))
+        if y < rows-1 and not visited[x][y+1]:  # 下
+            neighbors.append((x, y+1, 2, 0))
+        if x > 0 and not visited[x-1][y]:  # 左
+            neighbors.append((x-1, y, 3, 1))
+        
         if neighbors:
-            next_cell = random.choice(neighbors)
-            next_cell.visited = True
-            stack.append(current)
-            remove_walls(current, next_cell)
-            current = next_cell
-        elif stack:
-            current = stack.pop()
+            # 随机选择一个相邻单元格
+            next_x, next_y, wall, opposite_wall = random.choice(neighbors)
+            # 移除当前单元格和选中单元格之间的墙
+            target_grid[x][y].walls[wall] = False
+            target_grid[next_x][next_y].walls[opposite_wall] = False
+            # 标记为已访问并加入栈
+            visited[next_x][next_y] = True
+            stack.append((next_x, next_y))
         else:
-            break
-    
-    # 重置所有单元格的visited属性，下次生成准备
-    for x in range(cols):
-        for y in range(rows):
-            grid[x][y].visited = False
+            # 如果没有未访问的相邻单元格，回溯
+            stack.pop()
 
 # 绘制出
 def draw_exit(screen):
@@ -287,7 +457,7 @@ def draw_exit(screen):
         x = offset_x + (cols - 1) * cell_size
         y = offset_y + (rows - 1) * cell_size
         
-        # 检查是否完成所有任务迷宫
+        # 检查是否完成有任务迷宫
         if check_all_task_mazes_completed():
             if open_image:
                 # 计算居中位置
@@ -298,7 +468,7 @@ def draw_exit(screen):
                 pygame.draw.rect(screen, GREEN, (x, y, cell_size, cell_size))
         else:
             if lock_image:
-                # 计算居中位置
+                # ��算居中位置
                 img_x = x + (cell_size - lock_image.get_width()) // 2
                 img_y = y + (cell_size - lock_image.get_height()) // 2
                 screen.blit(lock_image, (img_x, img_y))
@@ -347,26 +517,64 @@ class Player:
         self.entry_point = None
 
     def move(self, direction):
-        # 确保玩家不会移动到信息区域
+        global can_through_wall
         new_x, new_y = self.x, self.y
         
-        if direction == "UP" and self.y > 0 and not grid[self.x][self.y].walls[0]:
-            new_y -= 1
-        if direction == "RIGHT" and self.x < cols - 1 and not grid[self.x][self.y].walls[1]:
-            new_x += 1
-            self.facing_right = True
-        if direction == "DOWN" and self.y < rows - 1 and not grid[self.x][self.y].walls[2]:
-            new_y += 1
-        if direction == "LEFT" and self.x > 0 and not grid[self.x][self.y].walls[3]:
-            new_x -= 1
-            self.facing_right = False
-            
-        # 检查新位置是否在迷宫区域内
+        if current_maze_type == "TASK":
+            # 任务迷宫中��移动逻辑需要考虑穿���模式
+            if can_through_wall:
+                if direction == "UP" and self.y > 0:
+                    new_y -= 1
+                if direction == "RIGHT" and self.x < cols - 1:
+                    new_x += 1
+                    self.facing_right = True
+                if direction == "DOWN" and self.y < rows - 1:
+                    new_y += 1
+                if direction == "LEFT" and self.x > 0:
+                    new_x -= 1
+                    self.facing_right = False
+            else:
+                if direction == "UP" and self.y > 0 and not grid[self.x][self.y].walls[0]:
+                    new_y -= 1
+                if direction == "RIGHT" and self.x < cols - 1 and not grid[self.x][self.y].walls[1]:
+                    new_x += 1
+                    self.facing_right = True
+                if direction == "DOWN" and self.y < rows - 1 and not grid[self.x][self.y].walls[2]:
+                    new_y += 1
+                if direction == "LEFT" and self.x > 0 and not grid[self.x][self.y].walls[3]:
+                    new_x -= 1
+                    self.facing_right = False
+        else:
+            # 普通迷宫中的移动逻辑保持不变
+            if can_through_wall:
+                if direction == "UP" and self.y > 0:
+                    new_y -= 1
+                if direction == "RIGHT" and self.x < cols - 1:
+                    new_x += 1
+                    self.facing_right = True
+                if direction == "DOWN" and self.y < rows - 1:
+                    new_y += 1
+                if direction == "LEFT" and self.x > 0:
+                    new_x -= 1
+                    self.facing_right = False
+            else:
+                if direction == "UP" and self.y > 0 and not grid[self.x][self.y].walls[0]:
+                    new_y -= 1
+                if direction == "RIGHT" and self.x < cols - 1 and not grid[self.x][self.y].walls[1]:
+                    new_x += 1
+                    self.facing_right = True
+                if direction == "DOWN" and self.y < rows - 1 and not grid[self.x][self.y].walls[2]:
+                    new_y += 1
+                if direction == "LEFT" and self.x > 0 and not grid[self.x][self.y].walls[3]:
+                    new_x -= 1
+                    self.facing_right = False
+        
+        # 更新位置
         if new_x * cell_size < MAZE_SIZE and new_y * cell_size < MAZE_SIZE:
             self.x, self.y = new_x, new_y
 
     def draw(self, screen):
-        # 计算实际绘制位置（居中显示）
+        # 计算际绘制位置（居中显示）
         offset_x = (MAZE_SIZE - cols * cell_size) // 2
         offset_y = (MAZE_SIZE - rows * cell_size) // 2
         x = offset_x + self.x * cell_size + (cell_size - self.image_width) // 2
@@ -387,67 +595,59 @@ def show_success(screen):
     pygame.time.delay(2000)
 
 def switch_to_task_maze():
-    global grid, current_maze_type, task_maze_grid, player, blue_squares, task_exit_pos, light_position
+    """切换到任务迷宫"""
+    global grid, current_maze_type, task_maze_grid, player, task_doors
+    global task_exit_pos, bomb_positions, bomb_image, task_maze_grids, task_maze_order
+    global is_fog_active, cell_size, bomb_original
     
-    # 记录任务迷宫顺序
-    entry_pos = (player.x, player.y)
-    if entry_pos not in task_maze_order:
-        task_maze_order.append(entry_pos)
+    # 保存玩家进入点
+    entry_point = (player.x, player.y)
+    player.entry_point = entry_point
     
-    # 记录进入点
-    player.entry_point = (player.x, player.y)
-    # 从蓝色方块列表中移除当前入口
-    blue_squares.remove((player.x, player.y))
+    # 如果这个入口点还没有对应的任务迷宫
+    if entry_point not in task_maze_order:
+        task_maze_order.append(entry_point)
+        
+        # 生成新的任务迷宫
+        task_maze_grid = [[Cell(x, y) for y in range(rows)] for x in range(cols)]
+        generate_maze(task_maze_grid)
+        
+        # 随机选择出口位置（在边缘）
+        edge_positions = []
+        for x in range(cols):
+            edge_positions.extend([(x, 0), (x, rows-1)])
+        for y in range(1, rows-1):
+            edge_positions.extend([(0, y), (cols-1, y)])
+        edge_positions.remove((0, 0))  # 移除入口位置
+        
+        task_exit_pos = random.choice(edge_positions)
+        task_maze_grids[entry_point] = (task_maze_grid, task_exit_pos)
+    else:
+        # 使用已存在的任务迷宫
+        task_maze_grid, task_exit_pos = task_maze_grids[entry_point]
     
-    # 创建新的任务迷宫网格
-    task_maze_grid = [[Cell(x, y) for y in range(rows)] for x in range(cols)]
+    # 切换到任务迷宫
     grid = task_maze_grid
     current_maze_type = "TASK"
     
-    # 重新生成迷宫
-    generate_task_maze()
+    # 重新计算cell_size并调整炸弹图片大小
+    if current_difficulty == "MEDIUM" and bomb_original:
+        new_size = int(cell_size * 0.8)
+        bomb_image = pygame.transform.scale(bomb_original, (new_size, new_size))
     
-    # 重置玩家位置到起点
-    player.x = 0
-    player.y = 0
+    # 重置迷雾效果
+    is_fog_active = False
     
-    # 随机生成出口位置（不能是起点）
-    while True:
-        exit_x = random.randint(0, cols-1)
-        exit_y = random.randint(0, rows-1)
-        if (exit_x, exit_y) != (0, 0):  # 确保出口不在起点
-            task_exit_pos = (exit_x, exit_y)
-            break
-    
-    # 在确定出口位置后生成任务位置
+    # 生成任务
     generate_task_positions()
     
-    # 如果是第一个任务迷宫，有80%的概率生成light
-    if len(task_maze_order) == 1:  # 第一个任务迷宫
-        light_position = None  # 重置light位置
-        if random.random() < 0.8:  # 80%的概率
-            # 获取所有任务位置
-            task_positions = [(task.x, task.y) for task in small_tasks]
-            if big_tasks:
-                task_positions.append((big_tasks[0].x, big_tasks[0].y))
-            
-            # 随机选择一个位置放置light（不能是起点、终点或任务位置）
-            available_positions = [(x, y) for x in range(cols) for y in range(rows)
-                                 if (x, y) != (0, 0)  # 不是起点
-                                 and (x, y) != task_exit_pos  # 不是终点
-                                 and (x, y) not in task_positions]  # 不是任务位置
-            
-            if available_positions:
-                light_position = random.choice(available_positions)
-    else:
-        light_position = None  # 其他任务迷宫没有light
-    
-    if enter_sound:
-        enter_sound.play()
+    # 在MEDIUM难度下生成炸弹
+    if current_difficulty == "MEDIUM":
+        generate_bomb_positions()
 
 def generate_task_maze():
     global grid
-    # 确保所有墙壁都是封闭的
+    # 确保所有墙壁封闭的
     for x in range(cols):
         for y in range(rows):
             grid[x][y].walls = [True, True, True, True]
@@ -457,8 +657,8 @@ def generate_task_maze():
     current = grid[0][0]
     current.visited = True
     
-    # 使用同的随机种子生成新迷宫
-    random.seed()  # 使用系间作为新的随机种子
+    # 使用不同的随机种生成新迷宫
+    random.seed()  # 使用系统时间作为新的随机种子
     
     while True:
         neighbors = check_neighbors(current)
@@ -467,7 +667,7 @@ def generate_task_maze():
             weights = []
             for neighbor in neighbors:
                 if neighbor.x > current.x or neighbor.y > current.y:
-                    weights.append(2)  # 向右或向下的权重更大
+                    weights.append(2)  # 向右或向下的权重更
                 else:
                     weights.append(1)
             next_cell = random.choices(neighbors, weights=weights)[0]
@@ -486,24 +686,31 @@ def generate_task_maze():
             grid[x][y].visited = False
 
 def return_to_normal_maze():
-    global grid, current_maze_type, player
-    print("返回普通迷宫")
+    """返回普通迷宫"""
+    global grid, current_maze_type, player, is_fog_active, task_doors
     
-    # 恢复原始迷宫
+    # 重置迷雾效果
+    is_fog_active = False
+    
+    # 恢复原迷宫
     grid = normal_maze_grid
     current_maze_type = "NORMAL"
     
-    # 将玩家传送回入口位置
+    # 从task_doors中移除当前入口点
+    if player.entry_point and player.entry_point in task_doors:
+        task_doors.remove(player.entry_point)
+    
+    # 玩家传送回入口位置
     if player.entry_point:
         player.x, player.y = player.entry_point
 
-# 添加显示提示信息的函数
+# 添加示提示息的函数
 def show_message(screen, message, color=WHITE):
     font = pygame.font.SysFont('Arial', 36)
     text = font.render(message, True, color)
     text_rect = text.get_rect(center=(WIDTH // 2, HEIGHT // 2))
     
-    # 创建一个半透明的背景
+    # 创建个半透明的背景
     background = pygame.Surface((text_rect.width + 20, text_rect.height + 20))
     background.fill(BLACK)
     background.set_alpha(200)
@@ -515,7 +722,7 @@ def show_message(screen, message, color=WHITE):
     pygame.display.update()
     pygame.time.delay(2000)  # 显示2秒
 
-# 添加显示消息框函数
+# 添加显示消息框函
 def show_popup_message(message):
     """显示消息框"""
     root = tk.Tk()
@@ -540,7 +747,7 @@ class Task:
         }
         op = random.choice(list(operators.keys()))
         if op == operator.truediv:
-            # 确保除法结果为整
+            # 确保除法结果为��数
             b = random.randint(1, 10)
             a = b * random.randint(1, 10)
         else:
@@ -553,11 +760,11 @@ class Task:
 
 def generate_task_positions():
     global small_tasks, big_tasks
-    # 清空现有任务
+    # 清现有任务
     small_tasks.clear()
     big_tasks.clear()
     
-    # 获取有可用位置（除起点和出口）
+    # 获可用位置（除起点和出口）
     available_positions = []
     for x in range(cols):
         for y in range(rows):
@@ -580,63 +787,44 @@ def generate_task_positions():
                                 selected_positions[pos_index][1], True))
 
 def show_math_task():
-    root = tk.Tk()
-    root.withdraw()
+    """显示数学任务"""
+    global current_health
     
-    # 生成问题
+    # 生成数学问题
     question, correct_answer = Task(0, 0).generate_math_question()
     
-    if coin_sound:
-        coin_sound.play()
+    # 创建一个临时的根窗口
+    root = tk.Tk()
+    root.withdraw()  # 隐藏主窗口
     
     try:
+        # 显示问题对话框
         answer = simpledialog.askfloat("数学题", f"{question} = ?", parent=root)
-        if answer is not None:  # 用户输入了答案
-            if abs(answer - correct_answer) < 0.01:  # 考虑浮点数误差
-                if success_sound:
-                    success_sound.play()
-                return True
-            else:
-                if failure_sound:
-                    failure_sound.play()
-                    root.bell()  # 禁用系统声音
-                    root.after(1)  # 等待一下以确保声音被禁用
-                messagebox.showinfo("结果", f"回答错误！正确答案是 {correct_answer}")
-                return False
-        else:  # 用户点击取消
+        
+        # 处理用户响应
+        if answer is None:  # 用户点击取消
+            return False
+        
+        # 检查答案
+        if abs(answer - correct_answer) < 0.01:  # 允许小的误差
+            messagebox.showinfo("正确", "回答正确！")
+            return True
+        else:
+            messagebox.showinfo("错误", f"正确答案是: {correct_answer}")
+            current_health -= 1  # 扣除生命值
+            if current_health <= 0:
+                messagebox.showinfo("游戏结束", "生命值耗尽！")
+                return None  # 表示生命值耗尽
             return False
     finally:
-        root.destroy()
-
-def relocate_task(task):
-    """重新定位单个任务的位置"""
-    # 获取所有可用位置（排除起点、出口和其他任务的位置）
-    available_positions = []
-    occupied_positions = [(0, 0)]  # 起点
-    
-    # 添加任务迷宫出口到已占用列表
-    if task_exit_pos:
-        occupied_positions.append(task_exit_pos)
-    
-    # 添加其他任务的位置到已占用列表
-    for small_task in small_tasks:
-        if small_task != task:  # 不包括当前任务
-            occupied_positions.append((small_task.x, small_task.y))
-    if big_tasks and task not in big_tasks:
-        occupied_positions.append((big_tasks[0].x, big_tasks[0].y))
-    
-    # 收集所有可用位置
-    for x in range(cols):
-        for y in range(rows):
-            if (x, y) not in occupied_positions:
-                available_positions.append((x, y))
-    
-    # 随机选择新位置
-    if available_positions:
-        new_pos = random.choice(available_positions)
-        task.x, task.y = new_pos
+        # 确保窗口被销毁
+        try:
+            root.destroy()
+        except:
+            pass
 
 def show_reaction_task():
+    """显示反应测试任务"""
     root = tk.Tk()
     root.title("反应测试")
     root.geometry("300x200")
@@ -648,34 +836,33 @@ def show_reaction_task():
         if timer['start'] is None:
             timer['start'] = time.time()
             button.config(text="再次点击！")
-            label.config(text="请在第5秒再次击按钮")
+            label.config(text="在第5秒再次点击按钮")
         else:
             end_time = time.time()
             time_diff = end_time - timer['start']
             if 4 <= time_diff <= 6:
                 if success_sound:
                     success_sound.play()
-                    root.bell()  # 禁用系统声音
-                    root.after(1)
-                messagebox.showinfo("结果", f"成功！你和第5秒的时间差仅为：{time_diff-5:.3f}秒")
                 result['success'] = True
+                messagebox.showinfo("结果", f"成功！你和第5秒的时间差仅为：{time_diff-5:.3f}秒")
             else:
                 if failure_sound:
                     failure_sound.play()
-                    root.bell()  # 禁用系统声音
-                    root.after(1)
                 messagebox.showinfo("结果", f"失败！你和第5秒的时间差为：{time_diff-5:.3f}秒\n需要在1秒范围内")
             root.quit()
     
-    label = tk.Label(root, text="点击按钮后，你需要在第5秒再次点击按钮\n若时间差在1秒内算通过", font=('Arial', 12))
+    label = tk.Label(root, text="点击按钮后，你需在第5秒再次点击按钮\n若时间差在1秒内算通过", font=('Arial', 12))
     label.pack(pady=20)
     
-    button = tk.Button(root, text="点击开始！", command=handle_click)
+    button = tk.Button(root, text="点开始", command=handle_click)
     button.pack(pady=10)
     
     root.mainloop()
-    root.destroy()  # 在mainloop之后销毁窗口
-    return result['success']
+    
+    success = result['success']
+    root.destroy()
+    
+    return success
 
 def check_task_completion():
     """检查任务完成情况"""
@@ -708,57 +895,58 @@ def show_task_progress():
         show_popup_message(f"Need to complete {small_remaining} small tasks\n"
                          f"or {big_remaining} big tasks to exit!")
 
-def handle_task_collision(x, y, last_position):
-    global small_tasks, big_tasks, player
+def handle_task_collision(new_x, new_y, last_position):
+    """处理任务碰撞"""
+    global current_health, is_fog_active
     
-    # 检查是否到达终点
-    if (x, y) == task_exit_pos:
-        # 只在第一次到达出口时检查（不是从出口位置移动）
-        if last_position != task_exit_pos:
-            if check_task_completion():
-                # 任务已完成，直接返回普通迷宫，不显示提示
-                return_to_normal_maze()
-                return False
-            else:
-                # 任务未完成，显示提示
-                show_task_progress()
-        return False  # 允许移动
+    # 检查是否碰到炸弹（仅在MEDIUM难度）
+    if current_difficulty == "MEDIUM" and (new_x, new_y) in bomb_positions:
+        if failure_sound:
+            failure_sound.play()
+        is_fog_active = True  # 激活迷雾效果
+        # 显示Oops提示
+        show_popup_message("Oops! 你触发了炸弹陷阱！")
+        # 移除当前炸弹
+        bomb_positions.remove((new_x, new_y))
+        return False
     
-    # 检查小任务
+    # 检查是否碰到小任务
     for task in small_tasks:
-        if (x, y) == (task.x, task.y) and not task.completed:
-            if coin_sound:  # 添加触碰音效
-                coin_sound.play()
-            if show_math_task():
-                task.completed = True
-            else:
-                relocate_task(task)
-            return True
-            
-    # 检查大任务
-    if big_tasks and (x, y) == (big_tasks[0].x, big_tasks[0].y) and not big_tasks[0].completed:
-        if coin_sound:  # 添加触碰音效
-                coin_sound.play()
-        if show_reaction_task():
-            big_tasks[0].completed = True
+        if not task.completed and task.x == new_x and task.y == new_y:
+            if handle_small_task(task):
+                return True
+            return False
+    
+    # 检查是否碰到大任务
+    for task in big_tasks:
+        if task.x == new_x and task.y == new_y:  # 先检查位置
+            if not task.completed:  # 再检查是否完成
+                if handle_big_task(task):
+                    return True
+                return False
+            break  # 如果任务已完成，继续检查其他任务
+    
+    # 检查是否到达任务迷宫出口
+    if current_maze_type == "TASK" and (new_x, new_y) == task_exit_pos:
+        if check_task_completion():
+            if success_sound:
+                success_sound.play()
+            return_to_normal_maze()
+            return False
         else:
-            relocate_task(big_tasks[0])
-        return True
+            if unacceptable_sound:
+                unacceptable_sound.play()
+            show_incomplete_task_message()
+            return False  # 移除了强制返回上一位置的代码
     
     return False
 
 def draw_tasks():
-    """绘制任务方块"""
+    """绘制任务方块和炸弹"""
     offset_x = (MAZE_SIZE - cols * cell_size) // 2
     offset_y = (MAZE_SIZE - rows * cell_size) // 2
     
-    # 绘制light（如果存在）
-    if light_position and light_image:
-        x = offset_x + light_position[0] * cell_size + (cell_size - light_image.get_width()) // 2
-        y = offset_y + light_position[1] * cell_size + (cell_size - light_image.get_height()) // 2
-        screen.blit(light_image, (x, y))
-    
-    # 绘制小任务
+    # 绘制小任��
     for task in small_tasks:
         if not task.completed:
             x = offset_x + task.x * cell_size + (cell_size - small_task_image.get_width()) // 2
@@ -770,27 +958,37 @@ def draw_tasks():
                                                 offset_y + task.y * cell_size, 
                                                 cell_size, cell_size))
     
-    # 绘制大任务
-    if big_tasks and not big_tasks[0].completed:
-        x = offset_x + big_tasks[0].x * cell_size + (cell_size - big_task_image.get_width()) // 2
-        y = offset_y + big_tasks[0].y * cell_size + (cell_size - big_task_image.get_height()) // 2
-        if big_task_image:
-            screen.blit(big_task_image, (x, y))
-        else:
-            pygame.draw.rect(screen, RED, (offset_x + big_tasks[0].x * cell_size,
-                                         offset_y + big_tasks[0].y * cell_size,
-                                         cell_size, cell_size))
+    # 绘制所有大任务，而���是只绘制一个
+    for task in big_tasks:
+        if not task.completed:
+            x = offset_x + task.x * cell_size + (cell_size - big_task_image.get_width()) // 2
+            y = offset_y + task.y * cell_size + (cell_size - big_task_image.get_height()) // 2
+            if big_task_image:
+                screen.blit(big_task_image, (x, y))
+            else:
+                pygame.draw.rect(screen, RED, (offset_x + task.x * cell_size,
+                                             offset_y + task.y * cell_size,
+                                             cell_size, cell_size))
+    
+    # 绘制炸弹
+    if current_difficulty == "MEDIUM":
+        for bomb_pos in bomb_positions:
+            x = offset_x + bomb_pos[0] * cell_size + (cell_size - bomb_image.get_width()) // 2
+            y = offset_y + bomb_pos[1] * cell_size + (cell_size - bomb_image.get_height()) // 2
+            if bomb_image:
+                screen.blit(bomb_image, (x, y))
+
 
 def check_all_task_mazes_completed():
     """检查是否完成了所有任务迷宫"""
-    # 检查是否还有未访问的蓝色方块
-    return len(blue_squares) == 0
+    # 检查是否��有未访问蓝色方块
+    return len(task_doors) == 0
 
 def show_remaining_tasks():
-    """显示剩余的任务迷宫数"""
-    if unacceptable_sound and len(blue_squares) > 0:
+    """示剩余的任务迷宫数"""
+    if unacceptable_sound and len(task_doors) > 0:
         unacceptable_sound.play()
-    remaining = len(blue_squares)
+    remaining = len(task_doors)
     if remaining > 0:
         show_popup_message(f"还有{remaining}个任务迷宫需要完成！")
     else:
@@ -804,7 +1002,7 @@ def draw_status_panel():
     # 使用默认字体
     font = pygame.font.SysFont('arial', 24)
     
-    # 获取当前难度的配置
+    # 获取当前难度配置
     current_difficulty = get_current_difficulty()
     required_stars = DIFFICULTY_CONFIGS[current_difficulty]["stars"]
     required_small_tasks = DIFFICULTY_CONFIGS[current_difficulty]["small_tasks"]
@@ -818,7 +1016,7 @@ def draw_status_panel():
         screen.blit(text, text_rect)
         
         # 修改这里的显示文本
-        remaining_stars = len(blue_squares)
+        remaining_stars = len(task_doors)
         mission_text = font.render(f"Mission remaining: {remaining_stars}/{required_stars}", True, WHITE)
         text_rect = mission_text.get_rect()
         text_rect.centerx = MAZE_SIZE + INFO_WIDTH//2
@@ -855,9 +1053,34 @@ def draw_status_panel():
                 big_text = font.render(f"{big_remaining} big tasks", True, WHITE)
                 screen.blit(big_text, (MAZE_SIZE + INFO_WIDTH//4, 160))
 
+    # 在状态面板底部绘血条
+    health_y = HEIGHT - 50  # 距离底部50像素
+    health_x = MAZE_SIZE + 20  # 距离右侧边界20像素
+    heart_width = 30  # 心形标宽度
+    heart_spacing = 10  # 心形图标间距
+    
+    for i in range(MAX_HEALTH):
+        heart_x = health_x + i * (heart_width + heart_spacing)
+        if i < current_health:
+            # 绘制红色实心心
+            pygame.draw.polygon(screen, (255, 0, 0), [
+                (heart_x + heart_width//2, health_y + 5),
+                (heart_x + heart_width, health_y + heart_width//2),
+                (heart_x + heart_width//2, health_y + heart_width),
+                (heart_x, health_y + heart_width//2)
+            ])
+        else:
+            # 绘制灰色空心心形
+            pygame.draw.polygon(screen, (128, 128, 128), [
+                (heart_x + heart_width//2, health_y + 5),
+                (heart_x + heart_width, health_y + heart_width//2),
+                (heart_x + heart_width//2, health_y + heart_width),
+                (heart_x, health_y + heart_width//2)
+            ], 2)
+
 def draw_start_menu():
     """绘制开始菜单"""
-    # 加载并缩放背景图片以适应窗口大小
+    # ��载并缩放背景图片适应窗口大小
     try:
         background = pygame.image.load('background.jpg')
         background = pygame.transform.scale(background, (WIDTH, HEIGHT))
@@ -869,18 +1092,18 @@ def draw_start_menu():
     font = pygame.font.SysFont('arial', 36)
     title_font = pygame.font.SysFont('arial', 48)
     
-    # 绘制半透明的黑色遮罩，使文字更容易阅读
+    # 绘制半透明的黑色遮罩，使字更容易阅读
     overlay = pygame.Surface((WIDTH, HEIGHT))
     overlay.fill(BLACK)
     overlay.set_alpha(128)  # 设置透明度 (0-255)
     screen.blit(overlay, (0, 0))
     
-    # 绘制标题 - 将标题位置改为 HEIGHT//4 使其上移
+    # 绘制标题 - 将标题位置改为 HEIGHT//4 使其移
     title = title_font.render("MAZE GAME", True, WHITE)
     title_rect = title.get_rect(center=(WIDTH//2, HEIGHT//4))
     screen.blit(title, title_rect)
     
-    # 绘制难度选项
+    # 绘制难度选择
     difficulties = ["EASY", "MEDIUM", "HARD"]
     button_height = 60
     button_width = 200
@@ -898,22 +1121,92 @@ def draw_start_menu():
     
     # 在绘制完按钮后，添加记录显示
     font = pygame.font.SysFont('arial', 24)
-    record_y = HEIGHT - 35  # 调整到距离底部5像素（标题）
+    record_y = HEIGHT - 35  # 调整距离底部5像素（标题）
     
     # 绘制记录标题
     title_text = font.render("Completion Records:", True, WHITE)
     screen.blit(title_text, (WIDTH - 350, record_y - 30))  # 距离右边350像素，上移30像素
     
-    # 在标题下方横向显示所有记录，确保最后一行距离底部5像素
-    for i, difficulty in enumerate(["EASY", "MEDIUM", "HARD"]):
-        record_text = font.render(f"{difficulty}: {COMPLETION_RECORDS[difficulty]}", True, WHITE)
-        screen.blit(record_text, (WIDTH - 350 + i * 100, record_y))  # 与标题左对齐，最终距离底部5像素
+    # 修改显示顺序和���距
+    difficulties = ["HARD", "MEDIUM", "EASY"]
+    spacing = 20  # 定义固定间距
+    current_x = WIDTH - 350  # 起始x坐标
     
-    return buttons
+    for difficulty in difficulties:
+        # 绘制难度名称和冒号
+        diff_text = font.render(f"{difficulty}:", True, WHITE)
+        screen.blit(diff_text, (current_x, record_y))
+        
+        # 计算数字的位置（难度名称后面固定间距）
+        number_x = current_x + diff_text.get_width() + 5  # 冒号后小间距
+        number_text = font.render(str(COMPLETION_RECORDS[difficulty]), True, WHITE)
+        screen.blit(number_text, (number_x, record_y))
+        
+        # 更新下一个难度的起始位置（数字后固定间距）
+        current_x = number_x + number_text.get_width() + spacing
+    
+    # Feedback按钮
+    feedback_button_width = 120
+    feedback_button_height = 40
+    feedback_button_x = 20
+    feedback_button_y = HEIGHT - 60
+    
+    feedback_button_rect = pygame.Rect(feedback_button_x, feedback_button_y, 
+                                     feedback_button_width, feedback_button_height)
+    
+    if feedback_button_rect.collidepoint(pygame.mouse.get_pos()):
+        pygame.draw.rect(screen, (100, 100, 100), feedback_button_rect)
+    else:
+        pygame.draw.rect(screen, (50, 50, 50), feedback_button_rect)
+    
+    pygame.draw.rect(screen, WHITE, feedback_button_rect, 2)
+    feedback_text = pygame.font.SysFont('arial', 24).render("Feedback", True, WHITE)
+    feedback_text_rect = feedback_text.get_rect(center=feedback_button_rect.center)
+    screen.blit(feedback_text, feedback_text_rect)
+    
+    # Rules按钮
+    rules_button_width = 120
+    rules_button_height = 40
+    rules_button_x = feedback_button_x + feedback_button_width + 20  # Feedback按钮右侧20像素
+    rules_button_y = HEIGHT - 60
+    
+    rules_button_rect = pygame.Rect(rules_button_x, rules_button_y, 
+                                   rules_button_width, rules_button_height)
+    
+    if rules_button_rect.collidepoint(pygame.mouse.get_pos()):
+        pygame.draw.rect(screen, (100, 100, 100), rules_button_rect)
+    else:
+        pygame.draw.rect(screen, (50, 50, 50), rules_button_rect)
+    
+    pygame.draw.rect(screen, WHITE, rules_button_rect, 2)
+    rules_text = pygame.font.SysFont('arial', 24).render("Rules", True, WHITE)
+    rules_text_rect = rules_text.get_rect(center=rules_button_rect.center)
+    screen.blit(rules_text, rules_text_rect)
+    
+    # 添加排行榜按钮
+    leaderboard_button_width = 120
+    leaderboard_button_height = 40
+    leaderboard_button_x = rules_button_x + rules_button_width + 20  # Rules按钮右侧20像素
+    leaderboard_button_y = HEIGHT - 60
+    
+    leaderboard_button_rect = pygame.Rect(leaderboard_button_x, leaderboard_button_y, 
+                                        leaderboard_button_width, leaderboard_button_height)
+    
+    if leaderboard_button_rect.collidepoint(pygame.mouse.get_pos()):
+        pygame.draw.rect(screen, (100, 100, 100), leaderboard_button_rect)
+    else:
+        pygame.draw.rect(screen, (50, 50, 50), leaderboard_button_rect)
+    
+    pygame.draw.rect(screen, WHITE, leaderboard_button_rect, 2)
+    leaderboard_text = pygame.font.SysFont('arial', 24).render("Leaderboard", True, WHITE)
+    leaderboard_text_rect = leaderboard_text.get_rect(center=leaderboard_button_rect.center)
+    screen.blit(leaderboard_text, leaderboard_text_rect)
+    
+    return buttons, feedback_button_rect, rules_button_rect, leaderboard_button_rect  # 修改返回值
 
 def show_start_menu():
     """显示开始菜单并返回选择的难度"""
-    global cols, rows, cell_size, star_image, small_task_image, big_task_image, lock_image, open_image, current_difficulty
+    global cols, rows, cell_size, task_door_image, small_task_image, big_task_image, lock_image, open_image, current_difficulty
     
     # 播放菜单BGM
     try:
@@ -923,7 +1216,7 @@ def show_start_menu():
     except pygame.error as e:
         print(f"Warning: Could not play menu BGM: {e}")
     
-    buttons = draw_start_menu()
+    buttons, feedback_button_rect, rules_button_rect, leaderboard_button_rect = draw_start_menu()
     pygame.display.flip()
     
     while True:
@@ -934,6 +1227,22 @@ def show_start_menu():
             
             if event.type == pygame.MOUSEBUTTONDOWN:
                 mouse_pos = pygame.mouse.get_pos()
+                
+                # 检查反馈按钮点击
+                if feedback_button_rect.collidepoint(mouse_pos):
+                    show_feedback_dialog()
+                    continue
+                    
+                # 检查规则按钮点击
+                if rules_button_rect.collidepoint(mouse_pos):
+                    show_rules_dialog()
+                    continue
+                
+                # 检查排行榜按钮点击
+                if leaderboard_button_rect.collidepoint(mouse_pos):
+                    show_leaderboard_dialog()
+                    continue
+                
                 for button_rect, _, _, difficulty in buttons:
                     if button_rect.collidepoint(mouse_pos):
                         # 停止菜单BGM
@@ -953,21 +1262,27 @@ def show_start_menu():
                         
                         # 重新调整所有图片大小
                         try:
-                            original_star = pygame.image.load('star.png')
+                            # 加载原始图片
+                            original_task_door = pygame.image.load('task_door.png')
                             original_small_task = pygame.image.load('small_task.png')
                             original_big_task = pygame.image.load('big_task.png')
                             original_lock = pygame.image.load('lock.png')
                             original_open = pygame.image.load('open.png')
+                            original_bomb = pygame.image.load('bomb.png')
                             
-                            new_size = int(cell_size * 0.8)  # 缩小到单元格的80%
-                            star_image = pygame.transform.scale(original_star, (new_size, new_size))
+                            # 计算新的大小
+                            new_size = int(cell_size * 0.8)
+                            
+                            # 重新缩放所有图片
+                            task_door_image = pygame.transform.scale(original_task_door, (new_size, new_size))
                             small_task_image = pygame.transform.scale(original_small_task, (new_size, new_size))
                             big_task_image = pygame.transform.scale(original_big_task, (new_size, new_size))
                             lock_image = pygame.transform.scale(original_lock, (new_size, new_size))
                             open_image = pygame.transform.scale(original_open, (new_size, new_size))
+                            
                         except pygame.error as e:
-                            print(f"Warning: Could not load image: {e}")
-                            star_image = None
+                            print(f"Warning: Could not load or scale image: {e}")
+                            task_door_image = None
                             small_task_image = None
                             big_task_image = None
                             lock_image = None
@@ -975,8 +1290,8 @@ def show_start_menu():
                             
                         return
         
-        # 重新绘菜单（包括背景）
-        buttons = draw_start_menu()
+        # 重新绘制菜单包括背景）
+        buttons, feedback_button_rect, rules_button_rect, leaderboard_button_rect = draw_start_menu()
         
         # 绘制按钮
         for button_rect, text, text_rect, _ in buttons:
@@ -985,7 +1300,7 @@ def show_start_menu():
                 pygame.draw.rect(screen, (100, 100, 100), button_rect)
             else:
                 pygame.draw.rect(screen, (50, 50, 50), button_rect)
-            pygame.draw.rect(screen, WHITE, button_rect, 2)  # 边框
+            pygame.draw.rect(screen, WHITE, button_rect, 2)  # 边���
             screen.blit(text, text_rect)
         
         pygame.display.flip()
@@ -996,11 +1311,11 @@ def draw_back_button():
     button_width = 100
     button_height = 40
     button_x = MAZE_SIZE + (INFO_WIDTH - button_width) // 2
-    button_y = HEIGHT - 100  # 距离底部100像素
+    button_y = HEIGHT - 100  # 距底部100像素
     
     button_rect = pygame.Rect(button_x, button_y, button_width, button_height)
     
-    # 检查鼠标悬停
+    # 检查标签悬停
     if button_rect.collidepoint(pygame.mouse.get_pos()):
         pygame.draw.rect(screen, (100, 100, 100), button_rect)
     else:
@@ -1018,18 +1333,18 @@ def draw_back_button():
 def show_confirmation_dialog():
     """显示确认对话框"""
     root = tk.Tk()
-    root.withdraw()  # 隐藏主窗口
+    root.withdraw()  # ����������藏主窗口
     result = messagebox.askyesno("Confirm", "Return to start menu?")
     root.destroy()
     return result
 
-# 添加新的函数用于寻找路
+# 添加新的函数用于寻找路径
 def find_path_to_exit():
-    """使用BFS寻找到出口的路径"""
+    """使用BFS找到出口的路径"""
     if current_maze_type == "NORMAL":
         target = (cols-1, rows-1)  # 普通迷宫出口
     else:
-        target = task_exit_pos  # 任务迷宫出口
+        target = task_exit_pos  # 任���迷宫出口
     
     start = (player.x, player.y)
     queue = [(start, [start])]
@@ -1056,14 +1371,14 @@ def find_path_to_exit():
     
     return None
 
-# 添加自动寻路动画函数
+# 添加自���路径动画函数
 def auto_path_animation(path):
     """显示自动寻路动画"""
     if not path:
         return
         
     original_pos = (player.x, player.y)
-    animation_speed = 100  # 毫秒
+    animation_speed = 100  # 毫��
     
     # 保存当前位置
     for pos in path:
@@ -1084,14 +1399,14 @@ def auto_path_animation(path):
         # 绘制状态面板
         draw_status_panel()
         
-        # 绘制返回钮和自动寻路按钮
+        # 绘制返回按钮和自动寻路按钮
         draw_back_button()
         draw_auto_path_button()
         
         pygame.display.flip()
         pygame.time.delay(animation_speed)
     
-    # 动画结束后返回原位置
+    # 动画结束后返���原位置
     pygame.time.delay(500)  # 在终点停留半秒
     player.x, player.y = original_pos
 
@@ -1102,7 +1417,7 @@ def draw_auto_path_button():
     button_width = 100
     button_height = 40
     button_x = MAZE_SIZE + (INFO_WIDTH - button_width) // 2
-    button_y = HEIGHT - 160  # 在返回按钮上方
+    button_y = HEIGHT - 160  # 在返回按钮下方
     
     button_rect = pygame.Rect(button_x, button_y, button_width, button_height)
     
@@ -1114,7 +1429,7 @@ def draw_auto_path_button():
     
     pygame.draw.rect(screen, WHITE, button_rect, 2)  # 边框
     
-    # 绘制按钮本
+    # 绘制按钮文本
     text = font.render('Auto Path', True, WHITE)
     text_rect = text.get_rect(center=button_rect.center)
     screen.blit(text, text_rect)
@@ -1122,24 +1437,287 @@ def draw_auto_path_button():
     return button_rect
 
 def get_current_difficulty():
-    """取当前游戏难度"""
+    """获取当前游戏难度"""
     global current_difficulty
     return current_difficulty
+
+def show_feedback_dialog():
+    """显示反馈对话框"""
+    root = tk.Tk()
+    root.title("问题反馈")
+    
+    # 设置窗口大小和位置
+    window_width = 500
+    window_height = 400
+    screen_width = root.winfo_screenwidth()
+    screen_height = root.winfo_screenheight()
+    x = (screen_width - window_width) // 2
+    y = (screen_height - window_height) // 2
+    root.geometry(f"{window_width}x{window_height}+{x}+{y}")
+    
+    # 创建标签
+    tk.Label(root, text="请描述您�����的问题:", font=('arial', 12)).pack(pady=10)
+    
+    # 创建文本框
+    text_box = tk.Text(root, height=10, width=50, font=('arial', 11))
+    text_box.pack(pady=10, padx=20)
+    
+    def submit_feedback():
+        feedback_content = text_box.get("1.0", tk.END).strip()
+        
+        if not feedback_content:
+            messagebox.showwarning("提示", "请输入反馈内容")
+            return
+        
+        # 显示发送中提示
+        status_label = tk.Label(root, text="正在发送...", font=('arial', 10))
+        status_label.pack(pady=5)
+        root.update()
+        
+        # 模拟发送延迟
+        root.after(1000, lambda: [
+            messagebox.showinfo("成功", "感谢您的反馈！我们将会尽快处理。"), 
+            root.destroy()
+        ])
+    
+    # 创建提交按钮
+    submit_btn = tk.Button(root, text="提交反馈", command=submit_feedback, 
+                          font=('arial', 11), width=15)
+    submit_btn.pack(pady=20)
+    
+    # 运行窗口
+    root.mainloop()
+
+def show_rules_dialog():
+    """显示游戏规则对话框"""
+    root = tk.Tk()
+    root.title("游戏规则")
+    
+    # 设置窗口大小和位置
+    window_width = 600
+    window_height = 500
+    screen_width = root.winfo_screenwidth()
+    screen_height = root.winfo_screenheight()
+    x = (screen_width - window_width) // 2
+    y = (screen_height - window_height) // 2
+    root.geometry(f"{window_width}x{window_height}+{x}+{y}")
+    
+    # 创建文本框
+    text_box = tk.Text(root, height=20, width=60, font=('arial', 11))
+    text_box.pack(pady=20, padx=20)
+    
+    # 游戏规则内容
+    rules_text = """游戏规则：
+
+1. 基本移动：
+   - 使用方向键控制角色移动
+   - 在迷宫中寻找出路
+
+2. 双迷宫结构：
+   第一层（主迷宫）：
+   - 包含通往第二层的蓝色星
+   - 必须完成第二层的任务才能通关
+
+3. 任务迷宫：
+   - 小任务：数学问题
+   - 大任务：计时挑战
+   - 完成规定数量的任务才能解锁出口
+
+4. 难度等级：
+   简单：
+   - 2个星星，3个小任务，1个大任务
+   - 完成3个小任务或1个大任务即可
+
+   中等：
+   - 3个星星，6个小任务，2个大任务
+   - 完成6个小任务或2个大任务即可
+
+   困难：
+   - 4个星星，9个小任务，3个大任务
+   - 完成9个小任务或3个大任务即可
+
+5. 出口规则：
+   - 完成规定任务数前主迷��出口保持锁定
+   - 绿色出口表示已锁
+   - 红色出口表示需要完成更多任务
+
+6. 游戏提示：
+   - 规划迷宫路线
+   - 记录已完成的任务
+   - 可以使用自动寻路功能
+"""
+    
+    # ��入规��文本
+    text_box.insert('1.0', rules_text)
+    text_box.config(state='disabled')  # 设置为只读
+    
+    # 创建关闭按钮
+    close_btn = tk.Button(root, text="关闭", command=root.destroy, 
+                         font=('arial', 11), width=15)
+    close_btn.pack(pady=20)
+    
+    # 运行窗口
+    root.mainloop()
+
+def show_author_dialog():
+    """显示作者询问对话框"""
+    global can_through_wall
+    root = tk.Tk()
+    root.withdraw()  # 隐藏主窗口
+    
+    result = messagebox.askyesno(
+        "重要问题", 
+        "作者帅不帅?",
+        icon='question',
+        default='yes'  # 默认选项为"是"
+    )
+    
+    if result:  # 选择"是"
+        can_through_wall = True
+        messagebox.showinfo("提示", "获得穿墙技能！")
+    else:  # 选择"否"
+        pygame.quit()
+        sys.exit()
+    
+    root.destroy()
+
+# 在全局变量区域添加（放在其他全局的位置）
+MAX_HEALTH = 5  # 最大生命值
+current_health = MAX_HEALTH  # 当前生命值
+
+# 在Task类定义之添加这些函数
+def decrease_health(amount):
+    """减少生命值"""
+    global current_health
+    current_health = max(0, current_health - amount)
+    if current_health <= 0:
+        show_game_over()
+        return True  # 返回True表示生命值耗尽
+    return False
+
+def show_game_over():
+    """显示游戏结束提示"""
+    root = tk.Tk()
+    root.withdraw()
+    if failure_sound:
+        failure_sound.play()
+    messagebox.showinfo("游戏结束", "生命值耗尽！游戏失败！")
+    root.destroy()
+
+def relocate_task(task):
+    """重新定位一个任务的位置"""
+    # 获取所有可用位置（排除起点、出口和其他任务的位置）
+    available_positions = []
+    occupied_positions = [(0, 0)]  # 起点
+    
+    # 添加任务迷宫出口和已占用列表
+    if task_exit_pos:
+        occupied_positions.append(task_exit_pos)
+    
+    # 添加其他任务的位置到已占用列表
+    for small_task in small_tasks:
+        if small_task != task:  # 不包括当前任务
+            occupied_positions.append((small_task.x, small_task.y))
+    for big_task in big_tasks:
+        if big_task != task:  # 不包括当前任务
+            occupied_positions.append((big_task.x, big_task.y))
+    
+    # 收集有用位置
+    for x in range(cols):
+        for y in range(rows):
+            if (x, y) not in occupied_positions:
+                available_positions.append((x, y))
+    
+    # 随机选择新位置
+    if available_positions:
+        new_pos = random.choice(available_positions)
+        task.x, task.y = new_pos
+
+def generate_bomb_positions():
+    """生成炸弹位置"""
+    global bomb_positions
+    
+    # 清空现有炸弹位置
+    bomb_positions = []
+    
+    # 只在MEDIUM难度下生成炸弹
+    if current_difficulty != "MEDIUM":
+        return
+    
+    # 获取所有可用位置（排除起点、终点和任务位置）
+    available_positions = []
+    occupied_positions = [(0, 0)]  # 起点
+    
+    # 添加出口到已占用位置
+    if task_exit_pos:
+        occupied_positions.append(task_exit_pos)
+    
+    # 添加任务位置到已占用列表
+    for task in small_tasks:
+        occupied_positions.append((task.x, task.y))
+    for task in big_tasks:
+        occupied_positions.append((task.x, task.y))
+    
+    # 收集可用位置
+    for x in range(cols):
+        for y in range(rows):
+            if (x, y) not in occupied_positions:
+                available_positions.append((x, y))
+    
+    # 随机选择一个位置放置炸弹
+    if available_positions:
+        bomb_pos = random.choice(available_positions)  # 只选择一个位置
+        bomb_positions.append(bomb_pos)  # 只添加一个炸弹位置
 
 # 主循环
 def main():
     global grid, normal_maze_grid, player, current_maze_type, task_maze_order
+    global can_through_wall, current_health, current_user, screen, task_maze_grids
+    global is_fog_active, bomb_image, cell_size  # 添加 bomb_image 和 cell_size
     
-    # 加载通关记录
+    # 初始化pygame
+    pygame.init()
+    screen = pygame.display.set_mode((WIDTH, HEIGHT))
+    pygame.display.set_caption("迷宫游戏")
+    
+    # 加载并显示背景图片，并调整亮度
+    try:
+        background_image = pygame.image.load("background.jpg")
+        background_image = pygame.transform.scale(background_image, (WIDTH, HEIGHT))
+        
+        # 创建一个半透明的黑色遮罩来降低亮度
+        dark_surface = pygame.Surface((WIDTH, HEIGHT))
+        dark_surface.fill((0, 0, 0))
+        dark_surface.set_alpha(128)  # 设置透明度 (0-255)
+        
+        # 绘制背景和遮罩
+        screen.blit(background_image, (0, 0))
+        screen.blit(dark_surface, (0, 0))
+        pygame.display.flip()
+    except:
+        print("Warning: Could not load background image")
+        screen.fill(BLACK)
+        pygame.display.flip()
+    
+    # 示登录界面
+    current_user = show_login_dialog()
+    if not current_user:
+        return
+    
+    # 登录后的代码继续使用原来的���色背景
+    screen.fill(BLACK)
+    
+    # 加载当前用户的通关记录
     load_records()
     
-    while True:  # 外层循环处理游戏重启
+    while True:  # 外层循环处理游戏启动
         # 显示开始菜单
         show_start_menu()
         
         # 开始播放BGM
         try:
-            pygame.mixer.music.play(-1)  # -1表示无限循环播放
+            pygame.mixer.music.load('bgm.mp3')
+            pygame.mixer.music.set_volume(0.3)
         except:
             print("Warning: Could not play BGM")
         
@@ -1147,10 +1725,14 @@ def main():
         grid = [[Cell(x, y) for y in range(rows)] for x in range(cols)]
         normal_maze_grid = grid
         generate_maze()
-        generate_blue_squares()
+        generate_task_doors()
         player = Player()
         current_maze_type = "NORMAL"
         task_maze_order = []
+        can_through_wall = False  # 重置穿墙状态
+        
+        # 重置生命值
+        current_health = MAX_HEALTH
         
         # 游戏主循环
         running = True
@@ -1166,16 +1748,15 @@ def main():
             draw_exit(screen)
             
             if current_maze_type == "NORMAL":
-                for (bx, by) in blue_squares:
+                for (bx, by) in task_doors:
                     offset_x = (MAZE_SIZE - cols * cell_size) // 2
                     offset_y = (MAZE_SIZE - rows * cell_size) // 2
-                    if star_image:
+                    if task_door_image:
                         # 计算居中位置
-                        x = offset_x + bx * cell_size + (cell_size - star_image.get_width()) // 2
-                        y = offset_y + by * cell_size + (cell_size - star_image.get_height()) // 2
-                        screen.blit(star_image, (x, y))
+                        x = offset_x + bx * cell_size + (cell_size - task_door_image.get_width()) // 2
+                        y = offset_y + by * cell_size + (cell_size - task_door_image.get_height()) // 2
+                        screen.blit(task_door_image, (x, y))
                     else:
-                        # 如果图片加载失败,使用蓝色方块作为后备
                         pygame.draw.rect(screen, BLUE, (offset_x + bx * cell_size, 
                                                       offset_y + by * cell_size, 
                                                       cell_size, cell_size))
@@ -1185,10 +1766,15 @@ def main():
             player.draw(screen)
             draw_status_panel()
             
-            # 添加这两行，确保绘制两个按钮
+            # 添加这两个确保绘制两个按钮
             draw_auto_path_button()  # 先绘制自动寻路按钮
             draw_back_button()       # 再绘制返回按钮
             
+            # 在所有元素绘制完成后,再绘制迷雾效果
+            if current_maze_type == "TASK" and is_fog_active:
+                draw_fog_of_war()
+            
+            # 最后更新显示
             pygame.display.flip()
             
             # 处理事件
@@ -1224,8 +1810,8 @@ def main():
                     if event.key == pygame.K_LEFT:
                         player.move("LEFT")
                     
-                    # 检查是否到达蓝色方块（普通迷宫中）
-                    if current_maze_type == "NORMAL" and (player.x, player.y) in blue_squares:
+                    # 是到达蓝色方块（普通迷宫中）
+                    if current_maze_type == "NORMAL" and (player.x, player.y) in task_doors:
                         switch_to_task_maze()
                     
                     # 检查是否到达终点
@@ -1242,14 +1828,166 @@ def main():
                     # 在任务迷宫中处理任务碰撞
                     if current_maze_type == "TASK":
                         if handle_task_collision(player.x, player.y, last_position):
-                            # 只有在任务未完成时才回到上一个位置
-                            if not check_task_completion():
-                                player.x, player.y = last_position
-            
-            # ... 其他游戏逻辑代码 ...
+                            running = False  # 结束当前游戏循环，返回菜单
+                            break
+                
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_SPACE:  # 检测空格键
+                        show_author_dialog()
 
         # 在游戏结束时停止BGM
         pygame.mixer.music.stop()
 
+def show_leaderboard_dialog():
+    """显示排行榜对话框"""
+    root = tk.Tk()
+    root.title("Leaderboard")
+    
+    # 设置窗口大小和位置
+    window_width = 600
+    window_height = 500
+    screen_width = root.winfo_screenwidth()
+    screen_height = root.winfo_screenheight()
+    x = (screen_width - window_width) // 2
+    y = (screen_height - window_height) // 2
+    root.geometry(f"{window_width}x{window_height}+{x}+{y}")
+    
+    # 创建文本框
+    text_box = tk.Text(root, height=20, width=60, font=('arial', 11))
+    text_box.pack(pady=20, padx=20)
+    
+    # 获取所有用户数据
+    users = load_users()
+    
+    # 创建用户得分列表
+    user_scores = []
+    for username, scores in users.items():
+        user_scores.append({
+            'username': username,
+            'hard': scores['HARD'],
+            'medium': scores['MEDIUM'],
+            'easy': scores['EASY']
+        })
+    
+    # 按照规则排序：优先hard，其次medium，最后easy
+    user_scores.sort(key=lambda x: (-x['hard'], -x['medium'], -x['easy']))
+    
+    # 生成排行榜文本
+    leaderboard_text = "Global Leaderboard\n\n"
+    for i, score in enumerate(user_scores, 1):
+        leaderboard_text += f"{i}. {score['username']}\n"
+        leaderboard_text += f"   HARD: {score['hard']} | MEDIUM: {score['medium']} | EASY: {score['easy']}\n\n"
+    
+    # 插入排行榜文本
+    text_box.insert('1.0', leaderboard_text)
+    text_box.config(state='disabled')  # 设置为只读
+    
+    # 创建关闭按钮
+    close_btn = tk.Button(root, text="Close", command=root.destroy, 
+                         font=('arial', 11), width=15)
+    close_btn.pack(pady=20)
+    
+    # 运行窗口
+    root.mainloop()
+
+def draw_fog_of_war():
+    """绘制迷雾效果"""
+    if not is_fog_active:
+        return
+        
+    # 创建迷雾表面
+    fog = pygame.Surface((MAZE_SIZE, MAZE_SIZE), pygame.SRCALPHA)
+    fog.fill((0, 0, 0, 250))  # 增加不透明度到250（几乎完全不透明）
+    
+    # 计算迷宫的实际偏移量
+    offset_x = (MAZE_SIZE - cols * cell_size) // 2
+    offset_y = (MAZE_SIZE - rows * cell_size) // 2
+    
+    # 计算以玩家为中心的3x3区域
+    for dy in range(-1, 2):  # -1, 0, 1
+        for dx in range(-1, 2):  # -1, 0, 1
+            # 计算目标格子的坐标
+            target_x = player.x + dx
+            target_y = player.y + dy
+            
+            # 确保坐标在迷宫范围内
+            if 0 <= target_x < cols and 0 <= target_y < rows:
+                # 计算屏幕上的实际位置
+                screen_x = offset_x + target_x * cell_size
+                screen_y = offset_y + target_y * cell_size
+                
+                # 在迷雾层上创建透明区域
+                transparent_rect = pygame.Rect(screen_x, screen_y, cell_size, cell_size)
+                pygame.draw.rect(fog, (0, 0, 0, 0), transparent_rect)
+                
+                # 添加渐变边缘
+                if dx in (-1, 1) or dy in (-1, 1):  # 只在3x3区域的边缘添加渐变
+                    edge_size = 5
+                    for i in range(edge_size):
+                        alpha = int(250 * i / edge_size)  # 使用更高的基础不透明度
+                        edge_rect = transparent_rect.inflate(i*2, i*2)
+                        pygame.draw.rect(fog, (0, 0, 0, alpha), edge_rect, 1)
+    
+    # 将迷雾层绘制到屏幕上
+    screen.blit(fog, (0, 0))
+
+def handle_big_task(task):
+    """处理大任务碰撞"""
+    # 显示反应测试任务
+    result = show_reaction_task()  # 修改这里，使用正确的函数名
+    
+    if result is None:  # 生命值耗尽
+        return True
+    elif result:
+        if coin_sound:
+            coin_sound.play()
+        task.completed = True
+        relocate_task(task)  # 重新定位任务
+        return False
+    else:
+        if failure_sound:
+            failure_sound.play()
+        if decrease_health(2):  # 修改这里，大任务失败扣2滴血
+            return True
+        relocate_task(task)  # 任务失败时也重新定位
+        return False
+
+def handle_small_task(task):
+    """处理小任务碰撞"""
+    # 显示数学题任务
+    result = show_math_task()
+    
+    if result is None:  # 生命值耗尽
+        return True
+    elif result:
+        if coin_sound:
+            coin_sound.play()
+        task.completed = True
+        relocate_task(task)  # 重新定位任务
+        return False
+    else:
+        if failure_sound:
+            failure_sound.play()
+        return False
+
+def show_incomplete_task_message():
+    """显示任务未完成提示"""
+    current_difficulty = get_current_difficulty()
+    required_small_tasks = DIFFICULTY_CONFIGS[current_difficulty]["small_tasks"]
+    required_big_tasks = DIFFICULTY_CONFIGS[current_difficulty]["big_tasks"]
+    
+    small_tasks_completed = sum(1 for task in small_tasks if task.completed)
+    big_tasks_completed = sum(1 for task in big_tasks if task.completed)
+    
+    small_remaining = required_small_tasks - small_tasks_completed
+    big_remaining = required_big_tasks - big_tasks_completed
+    
+    message = f"需要完成以下任务之一才能离开:\n"
+    message += f"- 还需完成 {small_remaining} 个小��务\n"
+    message += f"- 或完成 {big_remaining} 个大任务"
+    
+    show_popup_message(message)
+
 if __name__ == "__main__":
     main()
+
