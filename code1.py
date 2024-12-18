@@ -25,6 +25,8 @@ pygame.display.set_caption('Maze Game by dyh')
 cols = rows = 5  # 可以自由设置迷宫大小
 cell_size = MAZE_SIZE // max(cols, rows)  # 根据迷宫大小自动计算单元格大小
 
+
+
 # 加载并缩放star图片
 try:
     task_door_image = pygame.image.load('task_door.png')
@@ -486,7 +488,7 @@ def draw_exit(screen):
         x = offset_x + task_exit_pos[0] * cell_size
         y = offset_y + task_exit_pos[1] * cell_size
         
-        # ���������任务是否完成
+        # �������������任务是否完成
         if check_task_completion():
             if open_image:
                 # 计算居中位置
@@ -525,9 +527,6 @@ class Player:
 
     def move(self, direction):
         """移动玩家"""
-        print("[DEBUG] Move function - Current walls:", grid[self.x][self.y].walls)
-        print("[DEBUG] Can through wall:", can_through_wall)
-        
         new_x, new_y = self.x, self.y
         wall_index = {"UP": 0, "RIGHT": 1, "DOWN": 2, "LEFT": 3}[direction]
         
@@ -546,14 +545,9 @@ class Player:
             
             # 检查新位置是否在迷宫范围内
             if 0 <= new_x < cols and 0 <= new_y < rows:
-                print(f"[DEBUG] Move allowed to: ({new_x}, {new_y})")
                 self.x = new_x
                 self.y = new_y
                 return True
-            else:
-                print("[DEBUG] Move blocked - Out of bounds")
-        else:
-            print(f"[DEBUG] Move blocked - Wall present in direction {direction}")
         return False
 
     def draw(self, screen):
@@ -582,7 +576,7 @@ def switch_to_task_maze():
     """切换到任务迷宫"""
     global grid, current_maze_type, task_maze_grid, player, task_doors
     global task_exit_pos, bomb_positions, bomb_image, task_maze_grids, task_maze_order
-    global is_fog_active, cell_size, bomb_original, monster_image, heart_image
+    global is_fog_active, cell_size, bomb_original, monster_image, heart_image, endless_door_pos, endless_door_image
     
     # 保存玩家进入点
     entry_point = (player.x, player.y)
@@ -606,6 +600,10 @@ def switch_to_task_maze():
         
         task_exit_pos = random.choice(edge_positions)
         task_maze_grids[entry_point] = (task_maze_grid, task_exit_pos)
+        
+        # 在EASY模式下生成endless_door位置
+        if current_difficulty == "EASY":
+            generate_endless_door_position()
     else:
         # 使用已存在的任务迷宫
         task_maze_grid, task_exit_pos = task_maze_grids[entry_point]
@@ -614,7 +612,7 @@ def switch_to_task_maze():
     grid = task_maze_grid
     current_maze_type = "TASK"
     
-    # 重新计算cell_size并调整炸弹图片大小
+    # 重新计算cell_size并调整图片大小
     if current_difficulty == "MEDIUM" and bomb_original:
         new_size = int(cell_size * 0.8)
         bomb_image = pygame.transform.scale(bomb_original, (new_size, new_size))
@@ -878,7 +876,7 @@ def show_reaction_task():
 
 def check_task_completion():
     """检查任务完成情况"""
-    # 获取当前难度的配置
+    # 获取当前难度的�����
     current_difficulty = get_current_difficulty()
     required_small_tasks = DIFFICULTY_CONFIGS[current_difficulty]["small_tasks"]
     required_big_tasks = DIFFICULTY_CONFIGS[current_difficulty]["big_tasks"]
@@ -969,7 +967,7 @@ def draw_tasks():
                                                 offset_y + task.y * cell_size, 
                                                 cell_size, cell_size))
     
-    # 绘制所有大任务，而不是绘制一个
+    # 绘制所有大任务
     for task in big_tasks:
         if not task.completed:
             x = offset_x + task.x * cell_size + (cell_size - big_task_image.get_width()) // 2
@@ -980,6 +978,12 @@ def draw_tasks():
                 pygame.draw.rect(screen, RED, (offset_x + task.x * cell_size,
                                              offset_y + task.y * cell_size,
                                              cell_size, cell_size))
+    
+    # 在EASY模式下绘制endless_door
+    if current_difficulty == "EASY" and endless_door_pos and endless_door_image:
+        x = offset_x + endless_door_pos[0] * cell_size + (cell_size - endless_door_image.get_width()) // 2
+        y = offset_y + endless_door_pos[1] * cell_size + (cell_size - endless_door_image.get_height()) // 2
+        screen.blit(endless_door_image, (x, y))
     
     # 绘制炸弹
     if current_difficulty == "MEDIUM" and GAME_SETTINGS['enable_bombs']:
@@ -1671,7 +1675,7 @@ def show_monster_catch_message():
     """显示被怪物抓到的提示"""
     root = tk.Tk()
     root.withdraw()  # 隐藏主窗口
-    messagebox.showinfo("提示", "Oops！你被抓到了！")
+    messagebox.showinfo("提示", "Oops！你���抓到了！")
     root.destroy()
 
 # 主循环
@@ -1680,6 +1684,7 @@ def main():
     global can_through_wall, current_health, current_user, screen, task_maze_grids
     global is_fog_active, bomb_image, cell_size, monster_visited_positions, monster_stuck_count
     global player_image, original_player_image  # 添加original_player_image
+    global is_fog_active  # 添加全局变量声明
     
     # 初始化怪物相关变量
     monster_stuck_count = 0
@@ -1729,6 +1734,9 @@ def main():
     
     # 加载当前用户的通关记录
     load_records()
+    
+    # 初始化迷雾状态为False
+    is_fog_active = False
     
     while True:  # 外层循环处理游戏启动
         # 显示开始菜单
@@ -1805,42 +1813,56 @@ def main():
             # 绘制玩家（确保在怪物之后绘制）
             player.draw(screen)
             
+            # 只在迷雾效果激活时绘制
+            if is_fog_active:
+                draw_fog_of_war()
+            
             # 绘制状态面板
             draw_status_panel()
             
-            # 绘制按钮
-            draw_auto_path_button()
+            # 绘制所有按钮
             draw_back_button()
+            draw_auto_path_button()
+            if current_maze_type == "TASK":  # 只在任务迷宫中显示任务寻路按钮
+                small_task_button, big_task_button = draw_task_path_buttons()
             
-            # 如果有迷雾效果，在最后绘制
-            if current_maze_type == "TASK" and is_fog_active:
-                draw_fog_of_war()
-            
+            # 更新显示
             pygame.display.flip()
             
-            # 控制游戏速度
-            pygame.time.Clock().tick(60)  # 限制帧率为60FPS
-            
-            # 处理事件
+            # 事件处理
             for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    pygame.quit()
-                    sys.exit()
-                
                 if event.type == pygame.MOUSEBUTTONDOWN:
-                    # 检查是否点击了Back按钮
+                    mouse_pos = pygame.mouse.get_pos()
+                    
+                    # 检查返回按钮点击
                     back_button_rect = draw_back_button()
-                    if back_button_rect.collidepoint(event.pos):
+                    if back_button_rect.collidepoint(mouse_pos):
                         if show_confirmation_dialog():
                             running = False
                             break
-                
+                    
                     # 检查自动寻路按钮点击
                     auto_path_button_rect = draw_auto_path_button()
-                    if auto_path_button_rect.collidepoint(event.pos):
+                    if auto_path_button_rect.collidepoint(mouse_pos):
                         path = find_path_to_exit()
                         if path:
                             auto_path_animation(path)
+                    
+                    # 检查任务寻路按钮点击（仅在任务迷宫中）
+                    if current_maze_type == "TASK":
+                        small_task_button, big_task_button = draw_task_path_buttons()
+                        if small_task_button.collidepoint(mouse_pos):
+                            path = find_path_to_nearest_small_task()
+                            if path:
+                                auto_path_animation(path)
+                            else:
+                                show_popup_message("没有找到未完成的小任务！")
+                        elif big_task_button.collidepoint(mouse_pos):
+                            path = find_path_to_nearest_big_task()
+                            if path:
+                                auto_path_animation(path)
+                            else:
+                                show_popup_message("没有找到未完成的大任务！")
                 
                 # 只保留这一个键盘事件处理块
                 if event.type == pygame.KEYDOWN:
@@ -1998,12 +2020,12 @@ def draw_fog_of_war():
     fog = pygame.Surface((MAZE_SIZE, MAZE_SIZE), pygame.SRCALPHA)
     fog.fill((0, 0, 0, 250))  # 增加不透明度到250
     
-    # 计算迷宫的实际偏移量
+    # 计算迷宫的实际偏移��
     offset_x = (MAZE_SIZE - cols * cell_size) // 2
     offset_y = (MAZE_SIZE - rows * cell_size) // 2
     
     # 根据是否被惩罚决定视野范围
-    if is_punished:  # 添加一个全局变量来追踪是否被惩罚
+    if is_punished:  # 添加一个全局���量来追踪是否被惩罚
         # 只显示1x1区域
         screen_x = offset_x + player.x * cell_size
         screen_y = offset_y + player.y * cell_size
@@ -2028,7 +2050,7 @@ def draw_fog_of_war():
 is_punished = False  # 用于追踪是否被惩罚
 
 def handle_big_task(task):
-    """处理大任务碰撞"""
+    """处理大��务碰��"""
     # 显示反应测试任务
     result = show_reaction_task()  # 修改这里，使用正确的函数名
     
@@ -2049,7 +2071,7 @@ def handle_big_task(task):
         return False
 
 def handle_small_task(task):
-    """处理小任务碰撞"""
+    """处���小任务碰撞"""
     # 显示数学题任务
     result = show_math_task()
     
@@ -2406,6 +2428,160 @@ def show_settings_dialog():
     apply_button.pack(pady=20)
     
     root.mainloop()
+
+def find_path_to_nearest_small_task():
+    """使用BFS找到最近的小任务"""
+    start = (player.x, player.y)
+    queue = [(start, [start])]
+    visited = {start}
+    
+    # 获取所有未完成的小任务位置
+    task_positions = [(task.x, task.y) for task in small_tasks if not task.completed]
+    if not task_positions:
+        return None
+        
+    while queue:
+        (x, y), path = queue.pop(0)
+        # 检查是否到达任意一个小任务位置
+        if (x, y) in task_positions:
+            return path
+            
+        # 检查四个方向
+        if y > 0 and not grid[x][y].walls[0] and (x, y-1) not in visited:  # 上
+            queue.append(((x, y-1), path + [(x, y-1)]))
+            visited.add((x, y-1))
+        if x < cols-1 and not grid[x][y].walls[1] and (x+1, y) not in visited:  # 右
+            queue.append(((x+1, y), path + [(x+1, y)]))
+            visited.add((x+1, y))
+        if y < rows-1 and not grid[x][y].walls[2] and (x, y+1) not in visited:  # 下
+            queue.append(((x, y+1), path + [(x, y+1)]))
+            visited.add((x, y+1))
+        if x > 0 and not grid[x][y].walls[3] and (x-1, y) not in visited:  # 左
+            queue.append(((x-1, y), path + [(x-1, y)]))
+            visited.add((x-1, y))
+    
+    return None
+
+def find_path_to_nearest_big_task():
+    """使用BFS找到最近的大任务"""
+    start = (player.x, player.y)
+    queue = [(start, [start])]
+    visited = {start}
+    
+    # 获取所有未完成的大任务位置
+    task_positions = [(task.x, task.y) for task in big_tasks if not task.completed]
+    if not task_positions:
+        return None
+        
+    while queue:
+        (x, y), path = queue.pop(0)
+        # 检查是否到达任意一个大任务位置
+        if (x, y) in task_positions:
+            return path
+            
+        # 检查四个方向
+        if y > 0 and not grid[x][y].walls[0] and (x, y-1) not in visited:  # 上
+            queue.append(((x, y-1), path + [(x, y-1)]))
+            visited.add((x, y-1))
+        if x < cols-1 and not grid[x][y].walls[1] and (x+1, y) not in visited:  # 右
+            queue.append(((x+1, y), path + [(x+1, y)]))
+            visited.add((x+1, y))
+        if y < rows-1 and not grid[x][y].walls[2] and (x, y+1) not in visited:  # 下
+            queue.append(((x, y+1), path + [(x, y+1)]))
+            visited.add((x, y+1))
+        if x > 0 and not grid[x][y].walls[3] and (x-1, y) not in visited:  # 左
+            queue.append(((x-1, y), path + [(x-1, y)]))
+            visited.add((x-1, y))
+    
+    return None
+
+def draw_task_path_buttons():
+    """绘制任务寻路按钮"""
+    font = pygame.font.SysFont('arial', 24)
+    button_width = 120
+    button_height = 40
+    spacing = 10
+    
+    # 小任务按钮
+    small_button_x = MAZE_SIZE + (INFO_WIDTH - button_width) // 2
+    small_button_y = HEIGHT - 220  # 在Auto Path按钮上方
+    
+    small_button_rect = pygame.Rect(small_button_x, small_button_y, button_width, button_height)
+    
+    # 检查鼠标悬停
+    if small_button_rect.collidepoint(pygame.mouse.get_pos()):
+        pygame.draw.rect(screen, (100, 100, 100), small_button_rect)
+    else:
+        pygame.draw.rect(screen, (50, 50, 50), small_button_rect)
+    
+    pygame.draw.rect(screen, WHITE, small_button_rect, 2)  # 边框
+    
+    # 绘制按钮文本
+    small_text = font.render('Small Task', True, WHITE)
+    small_text_rect = small_text.get_rect(center=small_button_rect.center)
+    screen.blit(small_text, small_text_rect)
+    
+    # 大任务按钮
+    big_button_x = MAZE_SIZE + (INFO_WIDTH - button_width) // 2
+    big_button_y = small_button_y - button_height - spacing  # 在小任务按钮上方
+    
+    big_button_rect = pygame.Rect(big_button_x, big_button_y, button_width, button_height)
+    
+    # 检查鼠标悬停
+    if big_button_rect.collidepoint(pygame.mouse.get_pos()):
+        pygame.draw.rect(screen, (100, 100, 100), big_button_rect)
+    else:
+        pygame.draw.rect(screen, (50, 50, 50), big_button_rect)
+    
+    pygame.draw.rect(screen, WHITE, big_button_rect, 2)  # 边框
+    
+    # 绘制按钮文本
+    big_text = font.render('Big Task', True, WHITE)
+    big_text_rect = big_text.get_rect(center=big_button_rect.center)
+    screen.blit(big_text, big_text_rect)
+    
+    return small_button_rect, big_button_rect
+
+# 在全局变量区域添加
+endless_door_pos = None
+endless_door_image = None
+
+def generate_endless_door_position():
+    """生成endless_door的位置"""
+    global endless_door_pos, endless_door_image
+    
+    # 如果图片还没加载，加载并缩放图片
+    if endless_door_image is None:
+        try:
+            original_endless_door = pygame.image.load('endless_door.png')
+            new_size = int(cell_size * 0.8)
+            endless_door_image = pygame.transform.scale(original_endless_door, (new_size, new_size))
+        except pygame.error as e:
+            print(f"Warning: Could not load endless_door image: {e}")
+            endless_door_image = None
+            return
+    
+    # 获取可用位置（排除起点、出口和任务位置）
+    available_positions = []
+    occupied_positions = [(0, 0), task_exit_pos]  # 添加起点和出口
+    
+    # 添加任务位置到已占用列表
+    for task in small_tasks:
+        occupied_positions.append((task.x, task.y))
+    for task in big_tasks:
+        occupied_positions.append((task.x, task.y))
+    
+    # 收集可用位置
+    for x in range(cols):
+        for y in range(rows):
+            if (x, y) not in occupied_positions:
+                available_positions.append((x, y))
+    
+    # 随机选择位置
+    if available_positions:
+        endless_door_pos = random.choice(available_positions)
+
+
 
 if __name__ == "__main__":
     main()
