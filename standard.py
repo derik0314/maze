@@ -25,9 +25,7 @@ pygame.display.set_caption('Maze Game by dyh')
 cols = rows = 5  # 可以自由设置迷宫大小
 cell_size = MAZE_SIZE // max(cols, rows)  # 根据迷宫大小自动计算单元格大小
 
-
-
-# 加载缩放图片
+# 加载并缩放star图片
 try:
     task_door_image = pygame.image.load('task_door.png')
     small_task_image = pygame.image.load('small_task.png')
@@ -36,6 +34,7 @@ try:
     open_image = pygame.image.load('open.png')
     bomb_image = pygame.image.load('bomb.png')  # 保存原始图片
     bomb_original = bomb_image  # 保存原始炸弹图片以供后续缩放
+    
     # 统一使用cell_size的80%作为基准大小
     new_size = int(cell_size * 0.8)
     
@@ -61,7 +60,7 @@ except pygame.error as e:
     open_image = None
     bomb_image = None
     bomb_original = None
-    monster_image = None 
+    monster_image = None  # 确保在加载失败时设置为None
 
 # 在加载图片的try-except块后添加音效加载
 try:
@@ -122,17 +121,7 @@ task_maze_grids = {}  # 存储每个入口点对应的任务迷宫
 current_difficulty = "EASY"  # 默认难度
 can_through_wall = False  # 是否可以穿墙
 is_fog_active = True  # 是否启用迷雾效果
-heart_positions = []  # 存储心形道具的位置
-heart_image = None   # 心形道具的图片
-DAMAGE_INTERVAL = 7000  # 扣血间隔（毫秒）
-last_damage_time = 0    # 上次扣血时间
-horns_start_time = 0   # 进入荆棘迷宫的时间
-passing_door_positions = []  # 存储传送门位置
-passing_door_image = None   # 传送门图片
-TELEPORT_COOLDOWN = 1000   # 传送冷却时间(毫秒)
-last_teleport_time = 0     # 上次传送时间
-current_task_door = None  # 当前任务迷宫的入口位置
-bomb_positions = []  # 存储炸弹位置
+
 # 血条相关常量
 MAX_HEALTH = 5  # 最大生命值
 current_health = MAX_HEALTH  # 当前生命值
@@ -140,8 +129,7 @@ current_health = MAX_HEALTH  # 当前生命值
 # 定义状态文本（使用英文作为备选）
 MAZE_STATES = {
     "NORMAL": "Normal Maze",  # 如果中文无法显示就用英文
-    "TASK": "Task Maze #{}",    # 任务迷宫显示编号
-    "THORNS": "Thorns Maze"  # 添加新的迷宫类型
+    "TASK": "Task Maze {}"    # 任务迷宫显示编号
 }
 
 # 添加难度关的配置
@@ -203,7 +191,7 @@ def show_login_dialog():
     root.geometry("400x300")
     
     # 使用柔和的米色作为背景
-    bg_color = '#F5F5F5'  #    灰白色
+    bg_color = '#F5F5F5'  # ���灰白色
     text_color = '#2C3E50'  # 深蓝灰色
     button_bg = '#E8E8E8'  # 浅灰色
     button_fg = '#2C3E50'  # 深蓝灰色
@@ -277,7 +265,7 @@ def show_login_dialog():
             messagebox.showerror("错误", "请输入用户名！")
             return
         if username in users:
-            messagebox.showerror("错误", "用户     存在！")
+            messagebox.showerror("错误", "用户�����存在！")
             return
         users[username] = {
             "EASY": 0,
@@ -330,7 +318,7 @@ def save_records():
         save_users(users)
 
 def load_records():
-    """从文件加载通关   录"""
+    """从文件加载通关���录"""
     global COMPLETION_RECORDS
     if not current_user:
         return
@@ -370,7 +358,7 @@ class Cell:
         self.visited = False
         
     def draw(self, screen):
-        # 计算实际绘制位置（居  显示）
+        # 计算实际绘制位置（居��显示）
         offset_x = (MAZE_SIZE - cols * cell_size) // 2
         offset_y = (MAZE_SIZE - rows * cell_size) // 2
         x = offset_x + self.x * cell_size
@@ -453,18 +441,17 @@ def generate_maze(maze_grid=None):
             neighbors.append((x-1, y, 3, 1))
         
         if neighbors:
-            # 随机选择  个相邻单元格
+            # 随机选择一个相邻单元格
             next_x, next_y, wall, opposite_wall = random.choice(neighbors)
             # 移除当前单元格和选中单元格之间的墙
             target_grid[x][y].walls[wall] = False
             target_grid[next_x][next_y].walls[opposite_wall] = False
-            # 标   为已访问并加入栈
+            # 标记为已访问并加入栈
             visited[next_x][next_y] = True
             stack.append((next_x, next_y))
         else:
-            # 如果没有未访问的相邻单元格   回溯
+            # 如果没有未访问的相邻单元格，回溯
             stack.pop()
-    
 
 # 绘制出
 def draw_exit(screen):
@@ -477,7 +464,7 @@ def draw_exit(screen):
         x = offset_x + (cols - 1) * cell_size
         y = offset_y + (rows - 1) * cell_size
         
-        # 检查是否完成有     务迷宫
+        # 检查是否完成有�����务迷宫
         if check_all_task_mazes_completed():
             if open_image:
                 # 计算居中位置
@@ -488,18 +475,18 @@ def draw_exit(screen):
                 pygame.draw.rect(screen, GREEN, (x, y, cell_size, cell_size))
         else:
             if lock_image:
-                #   算居中位置
+                # ��算居中位置
                 img_x = x + (cell_size - lock_image.get_width()) // 2
                 img_y = y + (cell_size - lock_image.get_height()) // 2
                 screen.blit(lock_image, (img_x, img_y))
             else:
                 pygame.draw.rect(screen, RED, (x, y, cell_size, cell_size))
-    elif current_maze_type == "TASK":
-        # 任务迷宫的出  
+    else:
+        # 任务迷宫的出口
         x = offset_x + task_exit_pos[0] * cell_size
         y = offset_y + task_exit_pos[1] * cell_size
         
-        # 检查任务是否完成
+        # ���������任务是否完成
         if check_task_completion():
             if open_image:
                 # 计算居中位置
@@ -514,18 +501,8 @@ def draw_exit(screen):
                 img_x = x + (cell_size - lock_image.get_width()) // 2
                 img_y = y + (cell_size - lock_image.get_height()) // 2
                 screen.blit(lock_image, (img_x, img_y))
-    elif current_maze_type == "THORNS":
-        # 绘制荆棘迷宫出口
-        if thorns_exit_pos:
-            x = offset_x + thorns_exit_pos[0] * cell_size + (cell_size - open_image.get_width()) // 2
-            y = offset_y + thorns_exit_pos[1] * cell_size + (cell_size - open_image.get_height()) // 2
-            if open_image:
-                screen.blit(open_image, (x, y))
             else:
-                pygame.draw.rect(screen, GREEN, 
-                               (offset_x + thorns_exit_pos[0] * cell_size,
-                                offset_y + thorns_exit_pos[1] * cell_size,
-                                cell_size, cell_size))
+                pygame.draw.rect(screen, RED, (x, y, cell_size, cell_size))
 
 # 玩家类
 class Player:
@@ -548,27 +525,35 @@ class Player:
 
     def move(self, direction):
         """移动玩家"""
+        print("[DEBUG] Move function - Current walls:", grid[self.x][self.y].walls)
+        print("[DEBUG] Can through wall:", can_through_wall)
+        
         new_x, new_y = self.x, self.y
         wall_index = {"UP": 0, "RIGHT": 1, "DOWN": 2, "LEFT": 3}[direction]
         
-        # 检查是否可以移动
+        # 检查是否可以移动（考虑穿墙状态）
         if can_through_wall or not grid[self.x][self.y].walls[wall_index]:
             if direction == "UP":
                 new_y -= 1
             elif direction == "RIGHT":
                 new_x += 1
-                self.facing_right = True
+                self.facing_right = True  # 向右移动时朝右
             elif direction == "DOWN":
                 new_y += 1
             elif direction == "LEFT":
                 new_x -= 1
-                self.facing_right = False
+                self.facing_right = False  # 向左移动时朝左
             
             # 检查新位置是否在迷宫范围内
             if 0 <= new_x < cols and 0 <= new_y < rows:
+                print(f"[DEBUG] Move allowed to: ({new_x}, {new_y})")
                 self.x = new_x
                 self.y = new_y
                 return True
+            else:
+                print("[DEBUG] Move blocked - Out of bounds")
+        else:
+            print(f"[DEBUG] Move blocked - Wall present in direction {direction}")
         return False
 
     def draw(self, screen):
@@ -587,18 +572,9 @@ def show_success(screen):
     COMPLETION_RECORDS[current_difficulty] += 1
     save_records()  # 保存记录到文件
     
-    try:
-        # 加载并缩放成功背景图片
-        success_bg = pygame.image.load('success.png')
-        success_bg = pygame.transform.scale(success_bg, (WIDTH, HEIGHT))
-        screen.blit(success_bg, (0, 0))
-    except pygame.error:
-        # 如果加载图片失败，使用默认的文字显示
-        screen.fill(BLACK)
-        font = pygame.font.SysFont('Arial', 50)
-        text = font.render('SUCCESS!', True, GREEN)
-        screen.blit(text, (WIDTH // 2 - 100, HEIGHT // 2 - 25))
-    
+    font = pygame.font.SysFont('Arial', 50)
+    text = font.render('SUCCESS!', True, GREEN)
+    screen.blit(text, (WIDTH // 2 - 100, HEIGHT // 2 - 25))
     pygame.display.update()
     pygame.time.delay(2000)
 
@@ -606,13 +582,11 @@ def switch_to_task_maze():
     """切换到任务迷宫"""
     global grid, current_maze_type, task_maze_grid, player, task_doors
     global task_exit_pos, bomb_positions, bomb_image, task_maze_grids, task_maze_order
-    global is_fog_active, cell_size, bomb_original, monster_image, heart_image, endless_door_pos, endless_door_image
-    global current_task_door  # 添加全局变量声明
+    global is_fog_active, cell_size, bomb_original, monster_image, heart_image
     
     # 保存玩家进入点
     entry_point = (player.x, player.y)
     player.entry_point = entry_point
-    current_task_door = entry_point  # 保存当前任务迷宫入口位置
     
     # 如果这个入口点还没有对应的任务迷宫
     if entry_point not in task_maze_order:
@@ -632,10 +606,6 @@ def switch_to_task_maze():
         
         task_exit_pos = random.choice(edge_positions)
         task_maze_grids[entry_point] = (task_maze_grid, task_exit_pos)
-        
-        # 在EASY模式下生成endless_door位置
-        if current_difficulty == "EASY":
-            generate_endless_door_position()
     else:
         # 使用已存在的任务迷宫
         task_maze_grid, task_exit_pos = task_maze_grids[entry_point]
@@ -644,7 +614,7 @@ def switch_to_task_maze():
     grid = task_maze_grid
     current_maze_type = "TASK"
     
-    # 重新计算cell_size并调整图片大小
+    # 重新计算cell_size并调整炸弹图片大小
     if current_difficulty == "MEDIUM" and bomb_original:
         new_size = int(cell_size * 0.8)
         bomb_image = pygame.transform.scale(bomb_original, (new_size, new_size))
@@ -661,28 +631,29 @@ def switch_to_task_maze():
     
     # 在函数末尾添加，在HARD难度下初始化怪物和红心
     if current_difficulty == "HARD":
+        print("[DEBUG] Initializing monster and heart in HARD mode")
         try:
             if GAME_SETTINGS['enable_monster']:
                 if monster_image is None:
-
+                    print("[DEBUG] Loading monster image")
                     monster_image = pygame.image.load('banli.png')
                     new_size = int(cell_size * 0.8)
                     monster_image = pygame.transform.scale(monster_image, (new_size, new_size))
-                   
+                    print("[DEBUG] Monster image loaded and scaled successfully")
                 init_monster()
-                
+                print(f"[DEBUG] Monster initialized at position: {monster_pos}")
             
             if GAME_SETTINGS['enable_heart']:
                 if heart_image is None:
-                    
+                    print("[DEBUG] Loading heart image")
                     heart_original = pygame.image.load('heart.png')
                     new_size = int(cell_size * 0.6)
                     heart_image = pygame.transform.scale(heart_original, (new_size, new_size))
-                    
+                    print("[DEBUG] Heart image loaded and scaled successfully")
                 init_heart()
-               
+                print(f"[DEBUG] Heart initialized at position: {heart_pos}")
         except pygame.error as e:
-            
+            print(f"[DEBUG] Error loading images: {e}")
             monster_image = None
             heart_image = None
 
@@ -708,7 +679,7 @@ def generate_task_maze():
             weights = []
             for neighbor in neighbors:
                 if neighbor.x > current.x or neighbor.y > current.y:
-                    weights.append(2)  # 向右或向下        更
+                    weights.append(2)  # 向右或向下��������更
                 else:
                     weights.append(1)
             next_cell = random.choices(neighbors, weights=weights)[0]
@@ -788,7 +759,7 @@ class Task:
         }
         op = random.choice(list(operators.keys()))
         if op == operator.truediv:
-            # 确保除法结果为  数
+            # 确保除法结果为��数
             b = random.randint(1, 10)
             a = b * random.randint(1, 10)
         else:
@@ -885,11 +856,11 @@ def show_reaction_task():
                 if success_sound:
                     success_sound.play()
                 result['success'] = True
-                messagebox.showinfo("结果", f"成功！你和第5  的时间差仅为：{time_diff-5:.3f}秒")
+                messagebox.showinfo("结果", f"成功！你和第5秒的时间差仅为：{time_diff-5:.3f}秒")
             else:
                 if failure_sound:
                     failure_sound.play()
-                messagebox.showinfo("结果", f"失败！你和第5秒的时间差为：{time_diff-5:.3f}秒\n需要在1秒范围  ")
+                messagebox.showinfo("结果", f"失败！你和第5秒的时间差为：{time_diff-5:.3f}秒\n需要在1秒范围内")
             root.quit()
     
     label = tk.Label(root, text="点击按钮后，你需在第5秒再次点击按钮\n若时间差在1秒内算通过", font=('Arial', 12))
@@ -906,8 +877,8 @@ def show_reaction_task():
     return success
 
 def check_task_completion():
-    """检查任务完成      况"""
-    # 获取当前难度的     
+    """检查任务完成情况"""
+    # 获取当前难度的配置
     current_difficulty = get_current_difficulty()
     required_small_tasks = DIFFICULTY_CONFIGS[current_difficulty]["small_tasks"]
     required_big_tasks = DIFFICULTY_CONFIGS[current_difficulty]["big_tasks"]
@@ -920,7 +891,7 @@ def check_task_completion():
     return small_tasks_completed >= required_small_tasks or big_tasks_completed >= required_big_tasks
 
 def show_task_progress():
-    """显示任           进度"""
+    """显示任�����进度"""
     current_difficulty = get_current_difficulty()
     required_small_tasks = DIFFICULTY_CONFIGS[current_difficulty]["small_tasks"]
     required_big_tasks = DIFFICULTY_CONFIGS[current_difficulty]["big_tasks"]
@@ -936,173 +907,48 @@ def show_task_progress():
         show_popup_message(f"Need to complete {small_remaining} small tasks\n"
                          f"or {big_remaining} big tasks to exit!")
 
-def handle_task_collision(x, y, last_position):
+def handle_task_collision(new_x, new_y, last_position):
     """处理任务碰撞"""
-    global current_maze_type, current_health, heart_positions, thorn_positions, clear_potion_pos
-    global current_task_door, grid, bomb_positions, is_fog_active  # 添加is_fog_active到全局变量
+    global current_health, is_fog_active, is_punished  # 添加 is_punished
     
-    # 检查是否碰到红心
-    if current_maze_type == "TASK" and heart_pos and (x, y) == heart_pos:
-        if current_health < MAX_HEALTH:
-            current_health += 1
-            if success_sound:
-                success_sound.play()
-        init_heart()  # 重新生成红心位置
-        return False
-    
-    # 检查是否在中等难度下碰到炸弹
-    if current_difficulty == "MEDIUM" and GAME_SETTINGS['enable_bombs'] and (x, y) in bomb_positions:
+    # 检查是否碰到炸弹（仅在MEDIUM难度且启用炸弹时）
+    if current_difficulty == "MEDIUM" and GAME_SETTINGS['enable_bombs'] and (new_x, new_y) in bomb_positions:
         if failure_sound:
             failure_sound.play()  # 播放失败音效
         is_fog_active = True     # 激活迷雾效果
         is_punished = False      # 确保不是惩罚状态，保持3x3视野
         show_popup_message("Oops! 你触发了炸弹陷阱！")  # 显示提示信息
-        bomb_positions.remove((x, y))  # 移除已触发的炸弹
+        bomb_positions.remove((new_x, new_y))  # 移除已触发的炸弹
         return False
     
-    # 检查是否在荆棘迷宫中到达出口
-    if current_maze_type == "THORNS" and (x, y) == thorns_exit_pos:
-        return_from_thorns_maze()
-        return False
-    
-    # 在荆棘迷宫中检查心形道具碰撞
-    if current_maze_type == "THORNS" and (x, y) in heart_positions:
-        if current_health < MAX_HEALTH:
-            current_health = min(MAX_HEALTH, current_health + 1)
-            if success_sound:
-                success_sound.play()
-        heart_positions.remove((x, y))
-        return False
-    
-    # 检查清除药水碰撞
-    if current_maze_type == "THORNS" and (x, y) == clear_potion_pos:
-        thorn_positions.clear()  # 清除所有荆棘
-        clear_potion_pos = None  # 移除药水
-        if success_sound:
-            success_sound.play()
-        show_popup_message("所有荆棘已清除！")
-        return False
-    
-    # 检查荆棘碰撞
-    if current_maze_type == "THORNS" and (x, y) in thorn_positions:
-        if check_thorn_collision():
-            if current_health <= 0:
-                show_game_over()
+    # 检查是否碰到小任务
+    for task in small_tasks:
+        if not task.completed and task.x == new_x and task.y == new_y:
+            if handle_small_task(task):
                 return True
-        return False
+            return False
     
-    # 检查是否在任务迷宫中到达出口
-    if current_maze_type == "TASK" and (x, y) == task_exit_pos:
+    # 检查是否碰到大任务
+    for task in big_tasks:
+        if task.x == new_x and task.y == new_y:  # 先检查
+            if not task.completed:  # 再检查是否完
+                if handle_big_task(task):
+                    return True
+                return False
+            break  # 如果任务已完成，继续检查
+    
+    # 检查是否到达任务迷宫出口
+    if current_maze_type == "TASK" and (new_x, new_y) == task_exit_pos:
         if check_task_completion():
-            if current_task_door and current_task_door in task_doors:
-                task_doors.remove(current_task_door)  # 从任务门列表中移除已完成的入口
-            
-            # 切换回普通迷宫
-            current_maze_type = "NORMAL"
-            grid = normal_maze_grid
-            
-            # 将玩家传送回入口位置
-            if current_task_door:
-                player.x, player.y = current_task_door
-                current_task_door = None
-            
-            # 播放成功音效
             if success_sound:
                 success_sound.play()
-                
+            return_to_normal_maze()
             return False
         else:
+            if unacceptable_sound:
+                unacceptable_sound.play()
             show_incomplete_task_message()
-            return False  # 允许玩家站在出口位置，只是不能通过
-    
-    # 检查是否碰到任务
-    if current_maze_type == "TASK":  # 只在任务迷宫中处理任务碰撞
-        for task in small_tasks + big_tasks:
-            if (x, y) == (task.x, task.y) and not task.completed:
-                if task in small_tasks:
-                    if show_math_task():
-                        task.completed = True
-                        if coin_sound:
-                            coin_sound.play()
-                    else:
-                        # 为小任务重新生成位置
-                        available_positions = []
-                        occupied_positions = [(0, 0), task_exit_pos]  # 起点和出口
-                        
-                        # 添加其他任务的位置
-                        for other_task in small_tasks + big_tasks:
-                            if other_task != task:  # 不包括当前任务
-                                occupied_positions.append((other_task.x, other_task.y))
-                        
-                        # 如果有endless_door，也要避开它的位置
-                        if endless_door_pos:
-                            occupied_positions.append(endless_door_pos)
-                        
-                        # 收集可用位置
-                        for i in range(cols):
-                            for j in range(rows):
-                                if (i, j) not in occupied_positions:
-                                    available_positions.append((i, j))
-                        
-                        if available_positions:
-                            new_pos = random.choice(available_positions)
-                            task.x, task.y = new_pos
-                        
-                        player.x, player.y = last_position
-                else:  # 大任务处理
-                    if show_reaction_task():
-                        task.completed = True
-                        if coin_sound:
-                            coin_sound.play()
-                    else:
-                        # 大任务失败时扣除两点生命值
-                        current_health = max(0, current_health - 2)
-                        if failure_sound:
-                            failure_sound.play()
-                        flash_screen()  # 显示受伤特效
-                        
-                        # 添加这个检查
-                        if current_health <= 0:
-                            show_game_over()
-                            return True
-                        
-                        # 重新定位大任务位置
-                        available_positions = []
-                        occupied_positions = [(0, 0), task_exit_pos]
-                        for other_task in small_tasks + big_tasks:
-                            if other_task != task:
-                                occupied_positions.append((other_task.x, other_task.y))
-                        
-                        if endless_door_pos:
-                            occupied_positions.append(endless_door_pos)
-                            
-                        for i in range(cols):
-                            for j in range(rows):
-                                if (i, j) not in occupied_positions:
-                                    available_positions.append((i, j))
-                        
-                        if available_positions:
-                            new_pos = random.choice(available_positions)
-                            task.x, task.y = new_pos
-                        
-                        player.x, player.y = last_position
-                        
-                        # 检查是否生命值耗尽
-                        if current_health <= 0:
-                            return None
-                return False
-    
-    # 检查是否在荆棘迷宫中碰到荆棘
-    if current_maze_type == "THORNS" and (x, y) in thorn_positions:
-        # 检查荆棘碰撞
-        if check_thorn_collision():
-            # 如果生命值耗尽
-            if current_health <= 0:
-                show_game_over()
-                return True
-            # 否则退回上一个位置
-            player.x, player.y = last_position
-            return False
+            return False  # 除了强制返回上一位置的代码
     
     return False
 
@@ -1123,7 +969,7 @@ def draw_tasks():
                                                 offset_y + task.y * cell_size, 
                                                 cell_size, cell_size))
     
-    # 绘制所有大任务
+    # 绘制所有大任务，而不是绘制一个
     for task in big_tasks:
         if not task.completed:
             x = offset_x + task.x * cell_size + (cell_size - big_task_image.get_width()) // 2
@@ -1134,12 +980,6 @@ def draw_tasks():
                 pygame.draw.rect(screen, RED, (offset_x + task.x * cell_size,
                                              offset_y + task.y * cell_size,
                                              cell_size, cell_size))
-    
-    # 在EASY模式下绘制endless_door
-    if current_difficulty == "EASY" and endless_door_pos and endless_door_image:
-        x = offset_x + endless_door_pos[0] * cell_size + (cell_size - endless_door_image.get_width()) // 2
-        y = offset_y + endless_door_pos[1] * cell_size + (cell_size - endless_door_image.get_height()) // 2
-        screen.blit(endless_door_image, (x, y))
     
     # 绘制炸弹
     if current_difficulty == "MEDIUM" and GAME_SETTINGS['enable_bombs']:
@@ -1152,7 +992,7 @@ def draw_tasks():
 
 def check_all_task_mazes_completed():
     """检查是否完成了所有任务迷宫"""
-    # 检查是否  有未访问蓝色方块
+    # 检查是否��有未访问蓝色方块
     return len(task_doors) == 0
 
 def show_remaining_tasks():
@@ -1197,11 +1037,7 @@ def draw_status_panel():
     elif current_maze_type == "TASK":
         # 显示当前任务迷宫编号
         entry_pos = player.entry_point
-        try:
-            task_number = task_maze_order.index(entry_pos) + 1
-        except (ValueError, TypeError):
-            task_number = len(task_maze_order)  # 如果找不到位置，使用列表长度作为编号
-        
+        task_number = task_maze_order.index(entry_pos) + 1
         text = font.render(MAZE_STATES["TASK"].format(task_number), True, WHITE)
         text_rect = text.get_rect()
         text_rect.centerx = MAZE_SIZE + INFO_WIDTH//2
@@ -1253,44 +1089,6 @@ def draw_status_panel():
                 (heart_x, health_y + heart_width//2)
             ], 2)
 
-    if current_maze_type == "THORNS":
-        text = font.render(MAZE_STATES["THORNS"], True, WHITE)
-        text_rect = text.get_rect()
-        text_rect.centerx = MAZE_SIZE + INFO_WIDTH//2
-        text_rect.y = 50
-        screen.blit(text, text_rect)
-        
-        # 显示提示
-        hint_text = font.render("Find the exit to return", True, WHITE)
-        text_rect = hint_text.get_rect()
-        text_rect.centerx = MAZE_SIZE + INFO_WIDTH//2
-        text_rect.y = 100
-        screen.blit(hint_text, text_rect)
-        
-        # 显示倒计时
-        current_time = pygame.time.get_ticks()
-        time_until_damage = (DAMAGE_INTERVAL - (current_time - last_damage_time)) // 1000
-        timer_text = font.render(f"Next damage: {time_until_damage}s", True, RED)
-        timer_rect = timer_text.get_rect()
-        timer_rect.centerx = MAZE_SIZE + INFO_WIDTH//2
-        timer_rect.y = 250
-        screen.blit(timer_text, timer_rect)
-        
-       # 显示提示（分成两行显示）
-        hint_text1 = font.render("Auto-deduction", True, WHITE)
-        hint_text2 = font.render("every 7 seconds", True, WHITE)
-       
-        text_rect1 = hint_text1.get_rect()
-        text_rect1.centerx = MAZE_SIZE + INFO_WIDTH//2
-        text_rect1.y = 150
-       
-        text_rect2 = hint_text2.get_rect()
-        text_rect2.centerx = MAZE_SIZE + INFO_WIDTH//2
-        text_rect2.y = 180
-       
-        screen.blit(hint_text1, text_rect1)
-        screen.blit(hint_text2, text_rect2)
-
 def draw_start_menu():
     """绘制开始菜单"""
     # 载并放背景图片适应窗口大小
@@ -1336,9 +1134,9 @@ def draw_start_menu():
     font = pygame.font.SysFont('arial', 24)
     record_y = HEIGHT - 35  # 调整距离底部5像素（标题）
     
-    # 绘制记录   题
+    # 绘制记录标题
     title_text = font.render("Completion Records:", True, WHITE)
-    screen.blit(title_text, (WIDTH - 350, record_y - 30))  # 距离右边350像素，上移30像   
+    screen.blit(title_text, (WIDTH - 350, record_y - 30))  # 距离右边350像素，上移30像���
     
     # 修改显示顺序和间距
     difficulties = ["HARD", "MEDIUM", "EASY"]
@@ -1346,7 +1144,7 @@ def draw_start_menu():
     current_x = WIDTH - 350  # 起始x坐标
     
     for difficulty in difficulties:
-        # 绘制难度名称  冒号
+        # 绘制难度名称和冒号
         diff_text = font.render(f"{difficulty}:", True, WHITE)
         screen.blit(diff_text, (current_x, record_y))
         
@@ -1370,7 +1168,7 @@ def draw_start_menu():
     # Rules按钮
     rules_button_width = 120
     rules_button_height = 40
-    rules_button_x = feedback_button_x + feedback_button_width + 20  # Feedback按钮右侧20像   
+    rules_button_x = feedback_button_x + feedback_button_width + 20  # Feedback按钮右侧20像素
     rules_button_y = HEIGHT - 60
     
     rules_button_rect = pygame.Rect(rules_button_x, rules_button_y, 
@@ -1447,7 +1245,7 @@ def show_start_menu():
                     show_rules_dialog()
                     continue
                 
-                # 检查排行榜按钮点   
+                # 检查排行榜按钮点击
                 if leaderboard_button_rect.collidepoint(mouse_pos):
                     show_leaderboard_dialog()
                     continue
@@ -1487,7 +1285,7 @@ def show_start_menu():
                             # 计算新的大小
                             new_size = int(cell_size * 0.8)
                             
-                            # 重新放所   图片
+                            # 重新放所有图片
                             task_door_image = pygame.transform.scale(original_task_door, (new_size, new_size))
                             small_task_image = pygame.transform.scale(original_small_task, (new_size, new_size))
                             big_task_image = pygame.transform.scale(original_big_task, (new_size, new_size))
@@ -1751,7 +1549,7 @@ def show_rules_dialog():
    - 完成9个小任务或3个大任务即可
 
 5. 出口规则：
-   - 完成规定任务数前主迷宫出口保持  定
+   - 完成规定任务数前主迷宫出口保持锁定
    - 绿色出口表示已锁
    - 红色出口表示需要完成更多任务
 
@@ -1774,7 +1572,7 @@ def show_rules_dialog():
     root.mainloop()
 
 def show_author_dialog():
-    """显示作者   话框"""
+    """显示作者对话框"""
     root = tk.Tk()
     root.withdraw()
     result = messagebox.askyesno("重要提醒", "作者帅不帅？")
@@ -1796,13 +1594,13 @@ def decrease_health(amount):
     return False
 
 def show_game_over():
-   """显示游戏结束画面"""
-   gameover_bg = pygame.image.load('gameover.png')
-   gameover_bg = pygame.transform.scale(gameover_bg, (WIDTH, HEIGHT))
-   screen.blit(gameover_bg, (0, 0))
-   pygame.display.flip()
-   pygame.time.delay(2000)  # 显示2秒
-   show_start_menu()  # 直接调用显示开始菜单
+    """显示游戏结束提示"""
+    root = tk.Tk()
+    root.withdraw()
+    if failure_sound:
+        failure_sound.play()
+    messagebox.showinfo("游戏结束", "生命值耗尽！游戏失败！")
+    root.destroy()
 
 def relocate_task(task):
     """重新定位一个任务的位置"""
@@ -1814,7 +1612,7 @@ def relocate_task(task):
     if task_exit_pos:
         occupied_positions.append(task_exit_pos)
     
-    # 添加��他任务的位置到已占用列表
+    # 添加其他任务的位置到已占用列表
     for small_task in small_tasks:
         if small_task != task:  # 不包括当前任务
             occupied_positions.append((small_task.x, small_task.y))
@@ -1834,7 +1632,7 @@ def relocate_task(task):
         task.x, task.y = new_pos
 
 def generate_bomb_positions():
-    """生成炸弹置"""
+    """生成炸弹位置"""
     global bomb_positions
     
     # 清空现有炸弹位置
@@ -1864,7 +1662,7 @@ def generate_bomb_positions():
             if (x, y) not in occupied_positions:
                 available_positions.append((x, y))
     
-    # 随机选择一个位置放置弹
+    # 随机选择一个位置放置炸弹
     if available_positions:
         bomb_pos = random.choice(available_positions)  # 只选择一个位置
         bomb_positions.append(bomb_pos)  # 只添加一个炸弹位置
@@ -1873,23 +1671,15 @@ def show_monster_catch_message():
     """显示被怪物抓到的提示"""
     root = tk.Tk()
     root.withdraw()  # 隐藏主窗口
-    messagebox.showinfo("提示", "Oops！你   抓到了！")
+    messagebox.showinfo("提示", "Oops！你被抓到了！")
     root.destroy()
 
 # 主循环
 def main():
-    global grid, player, task_doors, small_tasks, big_tasks
-    global current_maze_type, normal_maze_grid, task_maze_grid
-    global task_exit_pos, task_maze_order, task_maze_grids
-    global current_difficulty, current_health
     global grid, normal_maze_grid, player, current_maze_type, task_maze_order
     global can_through_wall, current_health, current_user, screen, task_maze_grids
     global is_fog_active, bomb_image, cell_size, monster_visited_positions, monster_stuck_count
     global player_image, original_player_image  # 添加original_player_image
-    global last_damage_time  # 添加这个全局变量
-    
-    # 初始化last_damage_time
-    last_damage_time = pygame.time.get_ticks()
     
     # 初始化怪物相关变量
     monster_stuck_count = 0
@@ -1940,10 +1730,7 @@ def main():
     # 加载当前用户的通关记录
     load_records()
     
-    # 初始化迷雾状态为False
-    is_fog_active = False
-    
-    while True:  # 外层循环   理游   启动
+    while True:  # 外层循环处理游戏启动
         # 显示开始菜单
         show_start_menu()
         
@@ -1954,16 +1741,11 @@ def main():
         except:
             print("Warning: Could not play BGM")
         
-        # 初  化游戏
+        # 初始化游戏
         grid = [[Cell(x, y) for y in range(rows)] for x in range(cols)]
         normal_maze_grid = grid
         generate_maze()
         generate_task_doors()
-        
-        # 在这里添加生成传送门
-        if current_difficulty == "HARD":
-            generate_passing_doors()
-            
         player = Player()
         current_maze_type = "NORMAL"
         task_maze_order = []
@@ -1972,48 +1754,25 @@ def main():
         # 重置生命值
         current_health = MAX_HEALTH
         
-        # 游戏循环
+        # 游戏主循环
         running = True
         while running:
             screen.fill(BLACK)
             pygame.draw.rect(screen, (30, 30, 30), (MAZE_SIZE, 0, INFO_WIDTH, HEIGHT))
             
-            # 在这里添加计时器检查
-            if current_maze_type == "THORNS":
-                current_time = pygame.time.get_ticks()
-                if current_time - last_damage_time >= DAMAGE_INTERVAL:
-                    current_health = max(0, current_health - 1)
-                    last_damage_time = current_time
-                    
-                    if failure_sound:
-                        failure_sound.play()
-                    flash_screen()
-                    
-                    # 添加这个检查
-                    if current_health <= 0:
-                        show_game_over()
-                        running = False
-                        break
-            
-            # 绘制迷宫网格
+            # 绘制游戏元素
             for x in range(cols):
                 for y in range(rows):
                     grid[x][y].draw(screen)
             
-            # 在这里添加绘制传送门
-            if current_maze_type == "NORMAL" and current_difficulty == "HARD":
-                draw_passing_doors()
-            
-            # 绘制出口
             draw_exit(screen)
             
-            # 根据不同迷宫类型绘制不同元素
             if current_maze_type == "NORMAL":
-                # 绘制任务门
                 for (bx, by) in task_doors:
                     offset_x = (MAZE_SIZE - cols * cell_size) // 2
                     offset_y = (MAZE_SIZE - rows * cell_size) // 2
                     if task_door_image:
+                        # 计算居中位置
                         x = offset_x + bx * cell_size + (cell_size - task_door_image.get_width()) // 2
                         y = offset_y + by * cell_size + (cell_size - task_door_image.get_height()) // 2
                         screen.blit(task_door_image, (x, y))
@@ -2023,72 +1782,69 @@ def main():
                                                       cell_size, cell_size))
             elif current_maze_type == "TASK":
                 draw_tasks()
+                # 在HARD模式的任务迷宫中处理怪物和红心
                 if current_difficulty == "HARD":
+                    # 只在启用红心时绘制和检查
                     if GAME_SETTINGS['enable_heart']:
                         draw_heart()
+                        check_heart_collision()
+                    
+                    # 只在启用怪物时更新和绘制
                     if GAME_SETTINGS['enable_monster']:
+                        update_monster()
                         draw_monster()
-            elif current_maze_type == "THORNS":
-              
-                draw_thorns()  # 确保这行代码被执行
+                        
+                        # 检查玩家是否碰到怪物
+                        if monster_pos and (player.x, player.y) == monster_pos:
+                            show_monster_catch_message()
+                            if decrease_health(1):
+                                running = False
+                                break
+                            init_monster()
             
-            # 绘制玩家（确保在所有其他元素之后绘制）
+            # 绘制玩家（确保在怪物之后绘制）
             player.draw(screen)
-            
-            # 绘制迷雾效果（如果启用）
-            if is_fog_active:
-                draw_fog_of_war()
-            
             
             # 绘制状态面板
             draw_status_panel()
             
             # 绘制按钮
-            draw_back_button()
             draw_auto_path_button()
-            if current_maze_type == "TASK":
-                draw_task_path_buttons()
+            draw_back_button()
+            
+            # 如果有迷雾效果，在最后绘制
+            if current_maze_type == "TASK" and is_fog_active:
+                draw_fog_of_war()
             
             pygame.display.flip()
             
-            # 事件处理
+            # 控制游戏速度
+            pygame.time.Clock().tick(60)  # 限制帧率为60FPS
+            
+            # 处理事件
             for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+                
                 if event.type == pygame.MOUSEBUTTONDOWN:
-                    mouse_pos = pygame.mouse.get_pos()
-                    
-                    # 检查返回按钮点击
+                    # 检查是否点击了Back按钮
                     back_button_rect = draw_back_button()
-                    if back_button_rect.collidepoint(mouse_pos):
+                    if back_button_rect.collidepoint(event.pos):
                         if show_confirmation_dialog():
                             running = False
                             break
-                    
+                
                     # 检查自动寻路按钮点击
                     auto_path_button_rect = draw_auto_path_button()
-                    if auto_path_button_rect.collidepoint(mouse_pos):
+                    if auto_path_button_rect.collidepoint(event.pos):
                         path = find_path_to_exit()
                         if path:
                             auto_path_animation(path)
-                    
-                    # 检查任务寻路按钮点击（仅在任务迷宫中）
-                    if current_maze_type == "TASK":
-                        small_task_button, big_task_button = draw_task_path_buttons()
-                        if small_task_button.collidepoint(mouse_pos):
-                            path = find_path_to_nearest_small_task()
-                            if path:
-                                auto_path_animation(path)
-                            else:
-                                show_popup_message("没有找到未完成的小任务！")
-                        elif big_task_button.collidepoint(mouse_pos):
-                            path = find_path_to_nearest_big_task()
-                            if path:
-                                auto_path_animation(path)
-                            else:
-                                show_popup_message("没有找到未完成的大任务！")
                 
                 # 只保留这一个键盘事件处理块
                 if event.type == pygame.KEYDOWN:
-                   
+                    print("[DEBUG] Key pressed:", pygame.key.name(event.key))
                     last_position = (player.x, player.y)
                     moved = False
                     
@@ -2117,18 +1873,18 @@ def main():
                             root.destroy()  # 确保窗口被销毁
                     
                     if event.key == pygame.K_UP:
-                        
+                        print("[DEBUG] Attempting to move UP from position:", (player.x, player.y))
                         moved = player.move("UP")
                     elif event.key == pygame.K_RIGHT:
-                       
+                        print("[DEBUG] Attempting to move RIGHT from position:", (player.x, player.y))
                         moved = player.move("RIGHT")
                         if player_image and original_player_image:
                             player_image = original_player_image  # 使用原始图像（朝右）
                     elif event.key == pygame.K_DOWN:
-                       
+                        print("[DEBUG] Attempting to move DOWN from position:", (player.x, player.y))
                         moved = player.move("DOWN")
                     elif event.key == pygame.K_LEFT:
-                       
+                        print("[DEBUG] Attempting to move LEFT from position:", (player.x, player.y))
                         moved = player.move("LEFT")
                         if player_image and original_player_image:
                             player_image = pygame.transform.flip(original_player_image, True, False)  # 水平翻转
@@ -2137,27 +1893,20 @@ def main():
                         root = tk.Tk()
                         root.withdraw()
                         # 显示作者对话框
-                        result = messagebox.askyesno("  要提   ", "作者帅不帅？")
+                        result = messagebox.askyesno("重要提醒", "作者帅不帅？")
                         if result:  # 如果回答是
                             can_through_wall = not can_through_wall  # 切换穿墙状态
                             # 显示获得穿墙技能的提示
-                            messagebox.showinfo("恭喜", "获得穿墙技      ")
+                            messagebox.showinfo("恭喜", "获得穿墙技能！")
                         root.destroy()  # 确保窗口被销毁
-                       
+                        print(f"[DEBUG] Through wall mode: {'enabled' if can_through_wall else 'disabled'}")
+                    
+                    print(f"[DEBUG] Move successful: {moved}")  # 添加调试输出
                     
                     # 移动后的检查
                     if moved:
-                        # 在这里添加传送检查
-                        if handle_teleport():
-                            continue
-                            
-                        # 检查是否碰到荆棘迷宫门
-                        if current_maze_type == "TASK" and (player.x, player.y) == endless_door_pos:
-                            switch_to_thorns_maze()
-                        # 检查是否碰到任务门
-                        elif current_maze_type == "NORMAL" and (player.x, player.y) in task_doors:
+                        if current_maze_type == "NORMAL" and (player.x, player.y) in task_doors:
                             switch_to_task_maze()
-                        # 检查是否到达主迷宫出口
                         elif current_maze_type == "NORMAL" and player.x == cols-1 and player.y == rows-1:
                             if last_position != (cols-1, rows-1):
                                 if check_all_task_mazes_completed():
@@ -2166,10 +1915,10 @@ def main():
                                     break
                                 else:
                                     show_remaining_tasks()
-                        # 检查任务碰撞（包括荆棘迷宫出口）
-                        elif handle_task_collision(player.x, player.y, last_position):
-                            running = False
-                            break
+                        elif current_maze_type == "TASK":
+                            if handle_task_collision(player.x, player.y, last_position):
+                                running = False
+                                break
             
             # 在绘制所有元素之后，pygame.display.flip()之前添加
             if current_maze_type == "TASK" and current_difficulty == "HARD":
@@ -2218,7 +1967,7 @@ def show_leaderboard_dialog():
             'easy': scores['EASY']
         })
     
-    # 按规则排序：优先hard，其次medium，最后easy
+    # 按照规则排序：优先hard，其次medium，最后easy
     user_scores.sort(key=lambda x: (-x['hard'], -x['medium'], -x['easy']))
     
     # 生成排行榜文本
@@ -2279,7 +2028,7 @@ def draw_fog_of_war():
 is_punished = False  # 用于追踪是否被惩罚
 
 def handle_big_task(task):
-    """处理大任务碰"""
+    """处理大任务碰撞"""
     # 显示反应测试任务
     result = show_reaction_task()  # 修改这里，使用正确的函数名
     
@@ -2294,7 +2043,7 @@ def handle_big_task(task):
     else:
         if failure_sound:
             failure_sound.play()
-        if decrease_health(2):  # 修改��里，大任务失败扣2滴血
+        if decrease_health(2):  # 修改这里，大任务失败扣2滴血
             return True
         relocate_task(task)  # 任务失败时也重新定位
         return False
@@ -2347,6 +2096,7 @@ def init_monster():
     """初始化怪物位置和方向"""
     global monster_pos, monster_direction, last_monster_move
     
+    print("[DEBUG] Starting monster initialization")
     
     # 获取可用位置（排除玩家位置、任务位置和出口）
     available_positions = []
@@ -2366,7 +2116,8 @@ def init_monster():
         monster_pos = random.choice(available_positions)
         monster_direction = random.choice([(0, 1), (0, -1), (1, 0), (-1, 0)])
         last_monster_move = pygame.time.get_ticks()  # 初始化最后移动时间
-        
+        print(f"[DEBUG] Monster initialized at: {monster_pos} with direction: {monster_direction}")
+
 def update_monster():
     """更新怪物位置"""
     global monster_pos, monster_direction, last_monster_move, monster_stuck_count, monster_visited_positions  # 添加所有需要的全局变量
@@ -2379,7 +2130,7 @@ def update_monster():
         return
     
     def can_move_to(from_pos, to_pos):
-        """检查是否以从个位置移动到另一个位置"""
+        """检查是否可以从一个位置移动到另一个位置"""
         dx = to_pos[0] - from_pos[0]
         dy = to_pos[1] - from_pos[1]
         
@@ -2409,7 +2160,7 @@ def update_monster():
     def find_path_to_target(start, target):
         """使用A*算法寻找到目标的路径"""
         def heuristic(a, b):
-            return abs(a[0] - b[0]) + abs(a[1] - b[1])  # 删除多余的右括号
+            return abs(a[0] - b[0]) + abs(a[1] - b[1])
         
         frontier = []
         heapq.heappush(frontier, (0, start))
@@ -2500,9 +2251,9 @@ def update_monster():
     
     if can_move_to(monster_pos, new_pos):
         monster_pos = new_pos
-    
+        print(f"[DEBUG] Monster moved to: {monster_pos}")
         
-        # 定期清除访问记录
+        # 定期清��访问记录
         if len(monster_visited_positions) > cols * rows // 3:
             monster_visited_positions.clear()
     
@@ -2515,7 +2266,7 @@ def draw_monster():
         offset_x = (MAZE_SIZE - cols * cell_size) // 2
         offset_y = (MAZE_SIZE - rows * cell_size) // 2
         
-        # 计算怪物的屏幕坐标
+        # 计算怪物的屏幕��标
         x = offset_x + monster_pos[0] * cell_size
         y = offset_y + monster_pos[1] * cell_size
         
@@ -2523,7 +2274,7 @@ def draw_monster():
         x += (cell_size - monster_image.get_width()) // 2
         y += (cell_size - monster_image.get_height()) // 2
         
-      
+        print(f"[DEBUG] Drawing monster at: {monster_pos}, screen coordinates: ({x}, {y})")
         screen.blit(monster_image, (x, y))
 
 # 在全局变量区域添加
@@ -2538,7 +2289,7 @@ heart_image = None
 heart_pos = None
 
 def init_heart():
-    """初始  红心位置"""
+    """初始化红心位置"""
     global heart_pos
     
     # 获取可用位置（排除玩家位置、怪物位置、任务位置和出口）
@@ -2548,7 +2299,7 @@ def init_heart():
     if monster_pos:
         occupied_positions.append(monster_pos)
     
-    # 添加  务位置
+    # 添加任务位置
     for task in small_tasks + big_tasks:
         occupied_positions.append((task.x, task.y))
     
@@ -2605,7 +2356,7 @@ def show_settings_dialog():
     root = tk.Tk()
     root.title("游戏设置")
     
-    #   置窗口大小和位置
+    # 设置窗口大小和位置
     window_width = 400
     window_height = 300
     screen_width = root.winfo_screenwidth()
@@ -2632,7 +2383,7 @@ def show_settings_dialog():
                             font=('Arial', 12))
     bomb_cb.pack(pady=5)
     
-    monster_cb = tk.Checkbutton(frame, text="启用怪   (仅在困难难度生效)", variable=monster_var,
+    monster_cb = tk.Checkbutton(frame, text="启用怪物 (仅在困难难度生效)", variable=monster_var,
                                font=('Arial', 12))
     monster_cb.pack(pady=5)
     
@@ -2656,685 +2407,7 @@ def show_settings_dialog():
     
     root.mainloop()
 
-def find_path_to_nearest_small_task():
-    """使用BFS找到最近的小任务"""
-    start = (player.x, player.y)
-    queue = [(start, [start])]
-    visited = {start}
-    
-    # 获取所有未完成的小任务位置
-    task_positions = [(task.x, task.y) for task in small_tasks if not task.completed]
-    if not task_positions:
-        return None
-        
-    while queue:
-        (x, y), path = queue.pop(0)
-        # 检查是否到达任意一个小任务位置
-        if (x, y) in task_positions:
-            return path
-            
-        # 检查四个方向
-        if y > 0 and not grid[x][y].walls[0] and (x, y-1) not in visited:  # 上
-            queue.append(((x, y-1), path + [(x, y-1)]))
-            visited.add((x, y-1))
-        if x < cols-1 and not grid[x][y].walls[1] and (x+1, y) not in visited:  # 右
-            queue.append(((x+1, y), path + [(x+1, y)]))
-            visited.add((x+1, y))
-        if y < rows-1 and not grid[x][y].walls[2] and (x, y+1) not in visited:  # 下
-            queue.append(((x, y+1), path + [(x, y+1)]))
-            visited.add((x, y+1))
-        if x > 0 and not grid[x][y].walls[3] and (x-1, y) not in visited:  # 左
-            queue.append(((x-1, y), path + [(x-1, y)]))
-            visited.add((x-1, y))
-    
-    return None
-
-def find_path_to_nearest_big_task():
-    """使用BFS找到最近的大任务"""
-    start = (player.x, player.y)
-    queue = [(start, [start])]
-    visited = {start}
-    
-    # 获取所有未完成的大任务位置
-    task_positions = [(task.x, task.y) for task in big_tasks if not task.completed]
-    if not task_positions:
-        return None
-        
-    while queue:
-        (x, y), path = queue.pop(0)
-        # 检查是否到达任意一个大任务位置
-        if (x, y) in task_positions:
-            return path
-            
-        # 检查四个方向
-        if y > 0 and not grid[x][y].walls[0] and (x, y-1) not in visited:  # 上
-            queue.append(((x, y-1), path + [(x, y-1)]))
-            visited.add((x, y-1))
-        if x < cols-1 and not grid[x][y].walls[1] and (x+1, y) not in visited:  # 右
-            queue.append(((x+1, y), path + [(x+1, y)]))
-            visited.add((x+1, y))
-        if y < rows-1 and not grid[x][y].walls[2] and (x, y+1) not in visited:  # 下
-            queue.append(((x, y+1), path + [(x, y+1)]))
-            visited.add((x, y+1))
-        if x > 0 and not grid[x][y].walls[3] and (x-1, y) not in visited:  # 左
-            queue.append(((x-1, y), path + [(x-1, y)]))
-            visited.add((x-1, y))
-    
-    return None
-
-def draw_task_path_buttons():
-    """绘制任务寻路按钮"""
-    font = pygame.font.SysFont('arial', 24)
-    button_width = 120
-    button_height = 40
-    spacing = 10
-    
-    # 小任务按钮
-    small_button_x = MAZE_SIZE + (INFO_WIDTH - button_width) // 2
-    small_button_y = HEIGHT - 220  # 在Auto Path按钮上方
-    
-    small_button_rect = pygame.Rect(small_button_x, small_button_y, button_width, button_height)
-    
-    # 检查鼠标悬停
-    if small_button_rect.collidepoint(pygame.mouse.get_pos()):
-        pygame.draw.rect(screen, (100, 100, 100), small_button_rect)
-    else:
-        pygame.draw.rect(screen, (50, 50, 50), small_button_rect)
-    
-    pygame.draw.rect(screen, WHITE, small_button_rect, 2)  # 边框
-    
-    # 绘制按钮文本
-    small_text = font.render('Small Task', True, WHITE)
-    small_text_rect = small_text.get_rect(center=small_button_rect.center)
-    screen.blit(small_text, small_text_rect)
-    
-    # 大任务按钮
-    big_button_x = MAZE_SIZE + (INFO_WIDTH - button_width) // 2
-    big_button_y = small_button_y - button_height - spacing  # 在小任务按钮上方
-    
-    big_button_rect = pygame.Rect(big_button_x, big_button_y, button_width, button_height)
-    
-    # 检查鼠标悬停
-    if big_button_rect.collidepoint(pygame.mouse.get_pos()):
-        pygame.draw.rect(screen, (100, 100, 100), big_button_rect)
-    else:
-        pygame.draw.rect(screen, (50, 50, 50), big_button_rect)
-    
-    pygame.draw.rect(screen, WHITE, big_button_rect, 2)  # 边框
-    
-    # 绘制按钮文本
-    big_text = font.render('Big Task', True, WHITE)
-    big_text_rect = big_text.get_rect(center=big_button_rect.center)
-    screen.blit(big_text, big_text_rect)
-    
-    return small_button_rect, big_button_rect
-
-# 在全局变量区域添加
-endless_door_pos = None
-endless_door_image = None
-
-def generate_endless_door_position():
-    """生成endless_door的位置"""
-    global endless_door_pos, endless_door_image
-    
-    # 如果已经生成过位置或已经访问过荆棘迷宫，则不再生成
-    if endless_door_pos is not None or thorns_maze_visited:
-        endless_door_pos = None
-        return
-    
-    # 如果图片还没加载，加载并缩放图片
-    if endless_door_image is None:
-        try:
-            original_endless_door = pygame.image.load('thorns_door.png')
-            new_size = int(cell_size * 0.8)
-            endless_door_image = pygame.transform.scale(original_endless_door, (new_size, new_size))
-        except pygame.error as e:
-            print(f"Warning: Could not load thorns_door image: {e}")
-            endless_door_image = None
-            return
-    
-    # 获取所有已占用的位置
-    occupied_positions = [(0, 0)]  # 起点
-    
-    # 添加出口位置
-    if task_exit_pos:
-        occupied_positions.append(task_exit_pos)
-    
-    # 添加所有任务的位置
-    for task in small_tasks:
-        occupied_positions.append((task.x, task.y))
-    for task in big_tasks:
-        occupied_positions.append((task.x, task.y))
-    
-    # 获取所有可用位置
-    available_positions = []
-    for x in range(cols):
-        for y in range(rows):
-            if (x, y) not in occupied_positions:
-                available_positions.append((x, y))
-    
-    # 如果有可用位置,随机选择一个
-    if available_positions:
-        endless_door_pos = random.choice(available_positions)
-    else:
-        endless_door_pos = None  # 如果没有可用位置则不生成荆棘门
-
-def generate_thorns_maze():
-    """生成荆棘迷宫"""
-    global thorns_maze_grid, thorns_exit_pos, grid, thorn_positions
-    global thorn_image, cell_size, heart_positions, heart_image
-    global clear_potion_pos, clear_potion_image  # 添加清除药水相关变量
-    
-    # 1. 初始化荆棘迷宫   格
-    thorns_maze_grid = [[Cell(x, y) for y in range(rows)] for x in range(cols)]
-    
-    # 2. 使用改进的深度优先搜索生成迷宫路径
-    def generate_paths(x, y):
-        stack = [(x, y)]
-        visited = {(x, y)}
-        
-        while stack:
-            current = stack[-1]
-            x, y = current
-            
-            # 获取所有未访问的相邻单元格
-            neighbors = []
-            # 检查四个方向：上、右、下、左
-            for dx, dy in [(0, -1), (1, 0), (0, 1), (-1, 0)]:
-                next_x, next_y = x + dx, y + dy
-                if (0 <= next_x < cols and 0 <= next_y < rows and 
-                    (next_x, next_y) not in visited):
-                    neighbors.append((next_x, next_y, dx, dy))
-            
-            if neighbors:
-                # 随机选择一个未访问的相邻单元格
-                next_x, next_y, dx, dy = random.choice(neighbors)
-                
-                # 移除当前格子和下一个格子之间的墙
-                if dy == -1:  # 向上
-                    thorns_maze_grid[x][y].walls[0] = False
-                    thorns_maze_grid[next_x][next_y].walls[2] = False
-                elif dx == 1:  # 向右
-                    thorns_maze_grid[x][y].walls[1] = False
-                    thorns_maze_grid[next_x][next_y].walls[3] = False
-                elif dy == 1:  # 向下
-                    thorns_maze_grid[x][y].walls[2] = False
-                    thorns_maze_grid[next_x][next_y].walls[0] = False
-                elif dx == -1:  # 向左
-                    thorns_maze_grid[x][y].walls[3] = False
-                    thorns_maze_grid[next_x][next_y].walls[1] = False
-                
-                stack.append((next_x, next_y))
-                visited.add((next_x, next_y))
-            else:
-                stack.pop()
-    
-    # 3. 从起点(0,0)开始生成迷宫
-    generate_paths(0, 0)
-    
-    # 4. 确保没有完全封闭的单元格
-    def ensure_connectivity():
-        for x in range(cols):
-            for y in range(rows):
-                # 检查当前单元格是否完全封闭
-                if all(thorns_maze_grid[x][y].walls):
-                    # 如果是，随机打开一个方向的墙
-                    possible_walls = []
-                    # 检查四个方向
-                    if y > 0:  # 上
-                        possible_walls.append(0)
-                    if x < cols-1:  # 右
-                        possible_walls.append(1)
-                    if y < rows-1:  # 下
-                        possible_walls.append(2)
-                    if x > 0:  # 左
-                        possible_walls.append(3)
-                    
-                    if possible_walls:
-                        # 随机选择一个方向打开墙
-                        wall_to_remove = random.choice(possible_walls)
-                        thorns_maze_grid[x][y].walls[wall_to_remove] = False
-                        
-                        # 同时打开相邻单元格的对应墙
-                        if wall_to_remove == 0:  # 上
-                            thorns_maze_grid[x][y-1].walls[2] = False
-                        elif wall_to_remove == 1:  # 右
-                            thorns_maze_grid[x+1][y].walls[3] = False
-                        elif wall_to_remove == 2:  # 下
-                            thorns_maze_grid[x][y+1].walls[0] = False
-                        elif wall_to_remove == 3:  # 左
-                            thorns_maze_grid[x-1][y].walls[1] = False
-    
-    # 5. 确保迷宫连通性
-    ensure_connectivity()
-    
-    # 6. 生成出口位置（避开起点）
-    available_positions = []
-    for x in range(cols):
-        for y in range(rows):
-            if (x, y) != (0, 0):  # 避开起点
-                available_positions.append((x, y))
-    
-    thorns_exit_pos = random.choice(available_positions)
-    
-    # 7. 将生成的荆棘迷宫设置为当前迷宫
-    grid = thorns_maze_grid
-    
-    # 8. 加载荆棘图片（移到生成位置之前）
-    try:
-      
-        original_thorn = pygame.image.load('thorn.png')
-        new_size = int(cell_size * 0.8)
-        thorn_image = pygame.transform.scale(original_thorn, (new_size, new_size))
-       
-    except Exception as e:
-     
-        thorn_image = None
-    
-    # 9. 生成荆棘位置
-    generate_thorn_positions()
-    
-    # 加载心形图片
-    try:
-        original_heart = pygame.image.load('heart.png')
-        new_size = int(cell_size * 0.8)
-        heart_image = pygame.transform.scale(original_heart, (new_size, new_size))
-    except Exception as e:
-        print(f"Warning: Could not load heart image: {e}")
-        heart_image = None
-    
-    # 生成荆棘位置
-    generate_thorn_positions()
-    
-    # 生成心形道具位置
-    generate_heart_positions()
-    
-    # 加载清除药水图片
-    try:
-        original_clear = pygame.image.load('clear.png')
-        new_size = int(cell_size * 0.8)
-        clear_potion_image = pygame.transform.scale(original_clear, (new_size, new_size))
-    except Exception as e:
-        print(f"Warning: Could not load clear potion image: {e}")
-        clear_potion_image = None
-    
-    # 生成药水位置
-    generate_clear_potion_position()
-
-
-def generate_thorn_positions():
-    """生成荆棘位置"""
-    global thorn_positions, thorns_exit_pos
-
-    # 清空现有荆棘位置
-    thorn_positions = []
-    
-    # 获取可用位置（排除起点、出口）
-    available_positions = []
-    occupied_positions = [(0, 0)]  # 起点
-    
-    if thorns_exit_pos:
-        occupied_positions.append(thorns_exit_pos)
-    
-    # 收集可用位置
-    for x in range(cols):
-        for y in range(rows):
-            if (x, y) not in occupied_positions:
-                available_positions.append((x, y))
-    
-    # 随机选择位置放置荆棘
-    num_thorns = min(7, len(available_positions))
-    if available_positions:
-        selected_positions = random.sample(available_positions, num_thorns)
-        thorn_positions.extend(selected_positions)
-
-def draw_thorns():
-    """  制荆  、心形道具和清除药水"""
-    global thorn_image, current_maze_type, clear_potion_image
-    
-    # 计算偏移量
-    offset_x = (MAZE_SIZE - cols * cell_size) // 2
-    offset_y = (MAZE_SIZE - rows * cell_size) // 2
-    
-    # 绘制荆棘
-    for pos in thorn_positions:
-        x = offset_x + pos[0] * cell_size
-        y = offset_y + pos[1] * cell_size
-        x += (cell_size - thorn_image.get_width()) // 2
-        y += (cell_size - thorn_image.get_height()) // 2
-        screen.blit(thorn_image, (x, y))
-    
-    # 绘制心形道具
-    draw_hearts()
-    
-    # 绘制清除药水
-    if clear_potion_pos and clear_potion_image:
-        x = offset_x + clear_potion_pos[0] * cell_size
-        y = offset_y + clear_potion_pos[1] * cell_size
-        x += (cell_size - clear_potion_image.get_width()) // 2
-        y += (cell_size - clear_potion_image.get_height()) // 2
-        screen.blit(clear_potion_image, (x, y))
-
-def switch_to_thorns_maze():
-    """切换到荆棘迷宫"""
-    global grid, current_maze_type, player, last_damage_time, thorns_start_time
-   
-    # 保存当前位置作为返回点
-    player.entry_point = (player.x, player.y)
-    
-    # 初始化计时器
-    last_damage_time = pygame.time.get_ticks()
-    thorns_start_time = last_damage_time
-    
-    # 生成新的荆棘迷宫
-    generate_thorns_maze()
-    
-    # 设置迷宫类型
-    current_maze_type = "THORNS"
-  
-    # 重置玩家位置到起点
-    player.x, player.y = 0, 0
-
-def return_from_thorns_maze():
-    """从荆棘迷宫返回任务迷宫"""
-    global grid, current_maze_type, player, task_maze_order, thorns_maze_visited
-    global endless_door_pos  # 添加这个全局变量
-    
-    # 标记荆棘迷宫已访问
-    thorns_maze_visited = True
-    
-    # 清除荆棘迷宫入口位置
-    endless_door_pos = None
-    
-    # 恢复任务迷宫
-    grid = task_maze_grid
-    current_maze_type = "TASK"
-    
-    # 玩家返回入口点
-    if player.entry_point:
-        player.x, player.y = player.entry_point
-        # 如果entry_point不在task_maze_order中，添加它
-        if player.entry_point not in task_maze_order:
-            task_maze_order.append(player.entry_point)
-        player.entry_point = None  # 清除入口点
-    
-    # 可以添加一个成功提示（可选）
-    show_popup_message("成功通过荆棘迷宫！")
-
-# 全局变量
-thorns_maze_grid = None
-thorns_exit_pos = None
-
-# 在全局变量区域添加
-thorns_maze_visited = False
-
-# 在全局变量区域添加
-thorn_positions = []  # 存储荆棘的位置
-thorn_image = None   # 荆棘的图片
-
-def check_thorn_collision():
-    """检查是否碰到荆棘"""
-    global thorn_positions, current_health
-    
-    current_pos = (player.x, player.y)
-    if current_pos in thorn_positions:
-        # 扣除生命值
-        current_health = max(0, current_health - 1)
-        
-        # 移除被碰到的荆棘
-        thorn_positions.remove(current_pos)
-        
-        # 播放受伤音效并显示闪烁效果
-        if failure_sound:
-            failure_sound.play()
-        flash_screen()
-        
-        if current_health <= 0:
-            return True
-            
-    return False
-
-def flash_screen():
-    """屏幕闪烁效果"""
-    # 创建红色半透明遮罩
-    flash = pygame.Surface((WIDTH, HEIGHT))
-    flash.fill((255, 0, 0))
-    flash.set_alpha(100)
-    
-    # 绘制遮罩
-    screen.blit(flash, (0, 0))
-    pygame.display.flip()
-    
-    # 等待一小段时间
-    pygame.time.delay(100)
-
-def generate_heart_positions():
-    """生成心形道具位置"""
-    global heart_positions, thorns_exit_pos, thorn_positions
-    
-    # 清空现有心形位置
-    heart_positions = []
-    
-    # 获取可用位置(排除起点、出口、荆棘位置)
-    available_positions = []
-    occupied_positions = [(0, 0)]  # 起点
-    
-    if thorns_exit_pos:
-        occupied_positions.append(thorns_exit_pos)
-    
-    # 添加荆棘位置到已占用列表
-    occupied_positions.extend(thorn_positions)
-    
-    # 收集可用位置
-    for x in range(cols):
-        for y in range(rows):
-            if (x, y) not in occupied_positions:
-                available_positions.append((x, y))
-    
-    # 随机选择3个位置放置心形道具
-    num_hearts = min(3, len(available_positions))
-    if available_positions:
-        selected_positions = random.sample(available_positions, num_hearts)
-        heart_positions.extend(selected_positions)
-
-def draw_hearts():
-    """绘制心形道具"""
-    global heart_image
-    
-    # 计算迷宫的实际偏移量
-    offset_x = (MAZE_SIZE - cols * cell_size) // 2
-    offset_y = (MAZE_SIZE - rows * cell_size) // 2
-    
-    for pos in heart_positions:
-        # 计算心形道具的屏幕坐标
-        x = offset_x + pos[0] * cell_size
-        y = offset_y + pos[1] * cell_size
-        
-        # 居中显示心形图片
-        x += (cell_size - heart_image.get_width()) // 2
-        y += (cell_size - heart_image.get_height()) // 2
-        
-        screen.blit(heart_image, (x, y))
-
-def check_thorn_collision():
-   """检查是否碰到荆棘或心形道具"""
-   global thorn_positions, heart_positions, current_health
-   
-   current_pos = (player.x, player.y)
-   
-   # 检查是否碰到心形道具
-   if current_pos in heart_positions:
-       # 回复生命值(不超过最大值)
-       if current_health < MAX_HEALTH:
-           current_health = min(MAX_HEALTH, current_health + 1)
-           if success_sound:
-               success_sound.play()
-       # 移除被吃掉的心形道具
-       heart_positions.remove(current_pos)
-       return False
-   
-   # 检查是否碰到荆棘
-   if current_pos in thorn_positions:
-       current_health = max(0, current_health - 1)
-       thorn_positions.remove(current_pos)
-       if failure_sound:
-           failure_sound.play()
-       flash_screen()
-       
-       if current_health <= 0:
-           return True
-           
-   return False
-
-def generate_clear_potion_position():
-    """生成清除药水位置"""
-    global clear_potion_pos, thorns_exit_pos, thorn_positions, heart_positions
-    
-    # 获取可用位置(排除起点、出口、荆棘位置和心形道具位置)
-    occupied_positions = [(0, 0)]  # 起点
-    
-    if thorns_exit_pos:
-        occupied_positions.append(thorns_exit_pos)
-    
-    # 添加荆棘和心形道具位置到已占用列表
-    occupied_positions.extend(thorn_positions)
-    occupied_positions.extend(heart_positions)
-    
-    # 收集可用位置
-    available_positions = []
-    for x in range(cols):
-        for y in range(rows):
-            if (x, y) not in occupied_positions:
-                available_positions.append((x, y))
-    
-    # 随机选择一个位置放置清除药水
-    if available_positions:
-        clear_potion_pos = random.choice(available_positions)
-    else:
-        clear_potion_pos = None
-
-def generate_passing_doors():
-    """生成传送门位置，确保两个传送门距离尽可能远"""
-    global passing_door_positions, passing_door_image
-    
-    # 清空现有���送门位置
-    passing_door_positions = []
-    
-    # 加载传送门图片
-    try:
-        original_door = pygame.image.load('passing_door.png')
-        new_size = int(cell_size * 0.8)
-        passing_door_image = pygame.transform.scale(original_door, (new_size, new_size))
-    except pygame.error as e:
-        print(f"Warning: Could not load passing door image: {e}")
-        passing_door_image = None
-        return
-    
-    # 获取可用位置（排除起点、终点和任务门位置）
-    available_positions = []
-    occupied_positions = [(0, 0), (cols-1, rows-1)]  # 起点和终点
-    occupied_positions.extend(task_doors)  # 任务门位置
-    
-    # 收集可用位置
-    for x in range(cols):
-        for y in range(rows):
-            if (x, y) not in occupied_positions:
-                available_positions.append((x, y))
-    
-    if len(available_positions) < 2:
-        return
-        
-    # 计算曼哈顿距离
-    def manhattan_distance(pos1, pos2):
-        return abs(pos1[0] - pos2[0]) + abs(pos1[1] - pos2[1])
-    
-    # 找到距离最远的两个点
-    max_distance = 0
-    best_pair = None
-    
-    # 使用堆优化搜索过程
-    for i, pos1 in enumerate(available_positions):
-        distances = []
-        for pos2 in available_positions[i+1:]:
-            dist = manhattan_distance(pos1, pos2)
-            heapq.heappush(distances, (-dist, pos2))  # 使用负距离来创建最大堆
-        
-        if distances:
-            dist, pos2 = heapq.heappop(distances)  # 获取最远的点
-            dist = -dist  # 转换回正距离
-            if dist > max_distance:
-                max_distance = dist
-                best_pair = (pos1, pos2)
-    
-    if best_pair:
-        passing_door_positions.extend(best_pair)
-def draw_passing_doors():
-   """绘制传送门"""
-   if not passing_door_image or current_maze_type != "NORMAL" or current_difficulty != "HARD":
-       return
-       
-   # 计算迷宫的实际偏移量
-   offset_x = (MAZE_SIZE - cols * cell_size) // 2
-   offset_y = (MAZE_SIZE - rows * cell_size) // 2
-   
-   for pos in passing_door_positions:
-       # 计算传送门的屏幕坐标
-       x = offset_x + pos[0] * cell_size
-       y = offset_y + pos[1] * cell_size
-       
-       # 居中显示传送门图片
-       x += (cell_size - passing_door_image.get_width()) // 2
-       y += (cell_size - passing_door_image.get_height()) // 2
-       
-       screen.blit(passing_door_image, (x, y))
-def handle_teleport():
-   """处理传送门传送"""
-   global last_teleport_time
-   
-   if (current_maze_type != "NORMAL" or 
-       current_difficulty != "HARD" or 
-       len(passing_door_positions) != 2):
-       return False
-       
-   current_pos = (player.x, player.y)
-   current_time = pygame.time.get_ticks()
-   
-   # 检查是否在传送门位置且冷却时间已过
-   if (current_pos in passing_door_positions and 
-       current_time - last_teleport_time >= TELEPORT_COOLDOWN):
-       
-       # 确定目标传送门位置
-       target_pos = passing_door_positions[1] if current_pos == passing_door_positions[0] else passing_door_positions[0]
-       
-       # 播放传送音效
-       if coin_sound:  # 可以使用现有的音效,或添加新的传送音效
-           coin_sound.play()
-       
-       # 传送玩家
-       player.x, player.y = target_pos
-       
-       # 更新上次传送时间
-       last_teleport_time = current_time
-       
-       # 添加传送特效
-       flash_teleport_effect()
-       return True
-   
-   return False
-def flash_teleport_effect():
-   """传送特效"""
-   # 创建蓝色半透明遮罩
-   flash = pygame.Surface((WIDTH, HEIGHT))
-   flash.fill((0, 0, 255))  # 蓝色
-   flash.set_alpha(100)
-   
-   # 绘制遮罩
-   screen.blit(flash, (0, 0))
-   pygame.display.flip()
-   
-   # 等待一小段时间
-   pygame.time.delay(100)
-
 if __name__ == "__main__":
     main()
 
+ 
